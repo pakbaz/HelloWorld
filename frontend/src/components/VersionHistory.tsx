@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { PromptVersion } from '../types';
-import { getVersions, restoreVersion } from '../repository';
+import type { PromptVersion } from '../db/RepositoryContext';
+import { useRepository } from '../db/RepositoryContext';
 
 interface VersionHistoryProps {
   promptId: number;
@@ -13,23 +13,25 @@ export function VersionHistory({
   currentVersion,
   onRestored,
 }: VersionHistoryProps) {
+  const repository = useRepository();
   const [versions, setVersions] = useState<PromptVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [restoring, setRestoring] = useState<number | null>(null);
 
   useEffect(() => {
     setLoading(true);
-    getVersions(promptId)
+    repository
+      .getVersions(promptId)
       .then(setVersions)
       .finally(() => setLoading(false));
-  }, [promptId, currentVersion]);
+  }, [repository, promptId, currentVersion]);
 
   async function handleRestore(v: PromptVersion) {
     if (v.version === currentVersion) return;
     if (!confirm(`Restore version ${v.version}? This will create a new snapshot on top of history.`)) return;
     setRestoring(v.id);
     try {
-      await restoreVersion(promptId, v.id);
+      await repository.restoreVersion(promptId, v.id);
       onRestored();
     } finally {
       setRestoring(null);

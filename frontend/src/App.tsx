@@ -6,19 +6,14 @@ import { PreviewPane } from './components/PreviewPane';
 import { TagSelector } from './components/TagSelector';
 import { PromptTable } from './components/PromptTable';
 import { VersionHistory } from './components/VersionHistory';
-import {
-  deletePrompt,
-  getPrompt,
-  getPrompts,
-  getPromptTags,
-  savePrompt,
-  setPromptTags,
-} from './repository';
-import type { Prompt } from './types';
+import { initDb } from './db/index';
+import { createRepository } from './repository/index.js';
+import { RepositoryContext, useRepository, type IRepository, type Prompt } from './db/RepositoryContext';
 
 type ActiveTab = 'editor' | 'history';
 
-function App() {
+function AppContent() {
+  const repository = useRepository();
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [selected, setSelected] = useState<Prompt | null>(null);
   const [title, setTitle] = useState('');
@@ -29,9 +24,9 @@ function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
 
   const loadPrompts = useCallback(async () => {
-    const list = await getPrompts();
+    const list = await repository.getPrompts();
     setPrompts(list);
-  }, []);
+  }, [repository]);
 
   useEffect(() => {
     loadPrompts();
@@ -51,7 +46,7 @@ function App() {
     setTitle(p.title);
     setBody(p.body);
     setVariables({});
-    const tags = await getPromptTags(p.id);
+    const tags = p.tags ?? [];
     setSelectedTagIds(tags.map((t) => t.id));
     setActiveTab('editor');
   }
@@ -63,12 +58,12 @@ function App() {
     }
     setSaving(true);
     try {
-      const saved = await savePrompt({
+      const saved = await repository.savePrompt({
         id: selected?.id,
         title: title.trim(),
         body,
       });
-      await setPromptTags(saved.id, selectedTagIds);
+      await repository.setPromptTags(saved.id, selectedTagIds);
       setSelected(saved);
       await loadPrompts();
     } finally {
@@ -77,20 +72,21 @@ function App() {
   }
 
   async function handleDelete(id: number) {
-    await deletePrompt(id);
+    await repository.deletePrompt(id);
     if (selected?.id === id) newPrompt();
     await loadPrompts();
   }
 
   async function handleRestored() {
     if (!selected) return;
-    const refreshed = await getPrompt(selected.id);
-    if (refreshed) {
-      setSelected(refreshed);
-      setTitle(refreshed.title);
-      setBody(refreshed.body);
+    const refreshed = await repository.getPrompts();
+    const updated = refreshed.find((p) => p.id === selected.id);
+    if (updated) {
+      setSelected(updated);
+      setTitle(updated.title);
+      setBody(updated.body);
     }
-    await loadPrompts();
+    setPrompts(refreshed);
   }
 
   return (
@@ -183,4 +179,26 @@ function App() {
   );
 }
 
-export default App;
+export default function App() {
+  const [repository, setRepository] = useState<IRepository | null>(null);
+
+  useEffect(() => {
+    initDb().then((db) => {
+      setRepository(createRepository({ backend: 'pglite', db }));
+    });
+  }, []);
+
+  if (!repository) {
+    return (
+      <div className="app-loading">
+        <p>Initialising database…</p>
+      </div>
+    );
+  }
+
+  return (
+    <RepositoryContext.Provider value={repository}>
+      <AppContent />
+    </RepositoryContext.Provider>
+  );
+}

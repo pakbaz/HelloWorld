@@ -1,4 +1,4 @@
-import type { Prompt } from '../types';
+import type { Prompt } from '../db/RepositoryContext';
 
 interface PromptTableProps {
   prompts: Prompt[];

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { Tag } from '../types';
-import { getTags, upsertTag } from '../repository';
+import type { Tag } from '../db/RepositoryContext';
+import { useRepository } from '../db/RepositoryContext';
 
 interface TagSelectorProps {
   selectedIds: number[];
@@ -8,12 +8,13 @@ interface TagSelectorProps {
 }
 
 export function TagSelector({ selectedIds, onChange }: TagSelectorProps) {
+  const repository = useRepository();
   const [tags, setTags] = useState<Tag[]>([]);
   const [newTag, setNewTag] = useState('');
 
   useEffect(() => {
-    getTags().then(setTags);
-  }, []);
+    repository.getTags().then(setTags);
+  }, [repository]);
 
   function toggle(id: number) {
     if (selectedIds.includes(id)) {
@@ -26,7 +27,7 @@ export function TagSelector({ selectedIds, onChange }: TagSelectorProps) {
   async function handleCreate() {
     const name = newTag.trim();
     if (!name) return;
-    const tag = await upsertTag(name);
+    const tag = await repository.saveTag({ name });
     setTags((prev) => (prev.find((t) => t.id === tag.id) ? prev : [...prev, tag]));
     onChange([...selectedIds, tag.id]);
     setNewTag('');
