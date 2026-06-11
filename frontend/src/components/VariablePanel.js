@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildInitialValues,
   extractUniqueVariables,
@@ -19,6 +19,16 @@ export function VariablePanel({
   const [values, setValues] = useState(() =>
     buildInitialValues(promptBody, defaultVariables),
   );
+  const onValuesChangeRef = useRef(onValuesChange);
+  const onRenderedPromptChangeRef = useRef(onRenderedPromptChange);
+
+  useEffect(() => {
+    onValuesChangeRef.current = onValuesChange;
+  }, [onValuesChange]);
+
+  useEffect(() => {
+    onRenderedPromptChangeRef.current = onRenderedPromptChange;
+  }, [onRenderedPromptChange]);
 
   useEffect(() => {
     const nextDefaults = buildInitialValues(promptBody, defaultVariables);
@@ -44,16 +54,16 @@ export function VariablePanel({
   );
 
   useEffect(() => {
-    if (onValuesChange) {
-      onValuesChange(values);
+    if (onValuesChangeRef.current) {
+      onValuesChangeRef.current(values);
     }
-  }, [onValuesChange, values]);
+  }, [values]);
 
   useEffect(() => {
-    if (onRenderedPromptChange) {
-      onRenderedPromptChange(renderedPrompt);
+    if (onRenderedPromptChangeRef.current) {
+      onRenderedPromptChangeRef.current(renderedPrompt);
     }
-  }, [onRenderedPromptChange, renderedPrompt]);
+  }, [renderedPrompt]);
 
   const handleChange = (name) => (event) => {
     const { value } = event.target;
