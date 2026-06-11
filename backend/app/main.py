@@ -1,7 +1,8 @@
+from app.database import engine
+from app.models import Base
+from app.routes import prompts, tags, variables
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .database import engine, Base
-from .routes import prompts, tags
 
 Base.metadata.create_all(bind=engine)
 
@@ -15,10 +16,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(prompts.router, prefix="/api")
-app.include_router(tags.router, prefix="/api")
+app.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
+app.include_router(variables.router, tags=["variables"])
+app.include_router(tags.router, prefix="/tags", tags=["tags"])
 
 
-@app.get("/api/health")
-def health():
+@app.get("/health")
+def health_check():
     return {"status": "ok"}

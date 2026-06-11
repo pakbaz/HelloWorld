@@ -1,85 +1,194 @@
-import { useState, useEffect, useCallback } from 'react';
-import { getRepository } from './repository';
-import type { IRepository, Prompt, Variable, Tag } from './repository';
-import { PromptTable } from './components/PromptTable';
-import { PromptEditor } from './components/PromptEditor';
+import { useCallback, useEffect, useState } from 'react';
 import './App.css';
+import { PromptEditor } from './components/PromptEditor';
+import { VariablePanel } from './components/VariablePanel';
+import { PreviewPane } from './components/PreviewPane';
+import { TagSelector } from './components/TagSelector';
+import { PromptTable } from './components/PromptTable';
+import { VersionHistory } from './components/VersionHistory';
+import { initDb } from './db/index';
+import { createRepository } from './repository/index.js';
+import { RepositoryContext, useRepository, type IRepository, type Prompt } from './db/RepositoryContext';
 
-type View = 'list' | 'editor';
+type ActiveTab = 'editor' | 'history';
 
-function App() {
-  const [repo, setRepo] = useState<IRepository | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function AppContent() {
+  const repository = useRepository();
   const [prompts, setPrompts] = useState<Prompt[]>([]);
-  const [allTags, setAllTags] = useState<Tag[]>([]);
-  const [view, setView] = useState<View>('list');
-  const [editing, setEditing] = useState<Prompt | null>(null);
+  const [selected, setSelected] = useState<Prompt | null>(null);
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [variables, setVariables] = useState<Record<string, string>>({});
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
 
-  const refresh = useCallback(async (r: IRepository) => {
-    const [ps, ts] = await Promise.all([r.getPrompts(), r.getTags()]);
-    setPrompts(ps);
-    setAllTags(ts);
-  }, []);
+  const loadPrompts = useCallback(async () => {
+    const list = await repository.getPrompts();
+    setPrompts(list);
+  }, [repository]);
 
   useEffect(() => {
-    let cancelled = false;
+    loadPrompts();
+  }, [loadPrompts]);
 
-    void (async () => {
-      try {
-        const r = await getRepository();
-        if (cancelled) return;
-        await refresh(r);
-        if (!cancelled) setRepo(r);
-      } catch (err) {
-        if (!cancelled) setError(String(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+  function newPrompt() {
+    setSelected(null);
+    setTitle('');
+    setBody('');
+    setVariables({});
+    setSelectedTagIds([]);
+    setActiveTab('editor');
+  }
 
-    return () => { cancelled = true; };
-  }, [refresh]);
+  async function selectPrompt(p: Prompt) {
+    setSelected(p);
+    setTitle(p.title);
+    setBody(p.body);
+    setVariables({});
+    const tags = p.tags ?? [];
+    setSelectedTagIds(tags.map((t) => t.id));
+    setActiveTab('editor');
+  }
 
-  const handleNew = () => {
-    setEditing(null);
-    setView('editor');
-  };
+  async function handleSave() {
+    if (!title.trim()) {
+      alert('Please enter a title.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const saved = await repository.savePrompt({
+        id: selected?.id,
+        title: title.trim(),
+        body,
+      });
+      await repository.setPromptTags(saved.id, selectedTagIds);
+      setSelected(saved);
+      await loadPrompts();
+    } finally {
+      setSaving(false);
+    }
+  }
 
-  const handleSelect = (p: Prompt) => {
-    setEditing(p);
-    setView('editor');
-  };
+  async function handleDelete(id: number) {
+    await repository.deletePrompt(id);
+    if (selected?.id === id) newPrompt();
+    await loadPrompts();
+  }
 
-  const handleCancel = () => {
-    setEditing(null);
-    setView('list');
-  };
+  async function handleRestored() {
+    if (!selected) return;
+    const refreshed = await repository.getPrompts();
+    const updated = refreshed.find((p) => p.id === selected.id);
+    if (updated) {
+      setSelected(updated);
+      setTitle(updated.title);
+      setBody(updated.body);
+    }
+    setPrompts(refreshed);
+  }
 
-  const handleSave = async (prompt: Prompt, variables: Variable[], tagIds: number[]) => {
-    if (!repo) return;
-    const saved = await repo.savePrompt(prompt);
-    await repo.saveVariables(saved.id!, variables);
-    await repo.setPromptTags(saved.id!, tagIds);
-    await refresh(repo);
-    setEditing(null);
-    setView('list');
-  };
+  return (
+    <div className="app">
+      <header className="app-header">
+        <h1>⚒ PromptForge</h1>
+        <p>AI Prompt Sandbox &amp; Snippet Manager</p>
+      </header>
 
-  const handleDelete = async (promptId: number) => {
-    if (!repo) return;
-    await repo.deletePrompt(promptId);
-    await refresh(repo);
-  };
+      <main className="app-main">
+        {/* Left panel: prompt list */}
+        <aside className="app-sidebar">
+          <button className="btn-new" onClick={newPrompt}>
+            + New Prompt
+          </button>
+          <PromptTable
+            prompts={prompts}
+            selectedId={selected?.id ?? null}
+            onSelect={selectPrompt}
+            onDelete={handleDelete}
+          />
+        </aside>
 
-  const handleNewTag = async (name: string): Promise<Tag> => {
-    if (!repo) throw new Error('Repository not ready');
-    const tag = await repo.saveTag({ name });
-    await refresh(repo);
-    return tag;
-  };
+        {/* Right panel: editor + history */}
+        <section className="app-workspace">
+          <div className="workspace-tabs">
+            <button
+              className={`tab${activeTab === 'editor' ? ' tab--active' : ''}`}
+              onClick={() => setActiveTab('editor')}
+            >
+              Editor
+            </button>
+            <button
+              className={`tab${activeTab === 'history' ? ' tab--active' : ''}`}
+              disabled={!selected}
+              onClick={() => setActiveTab('history')}
+            >
+              Version History
+              {selected && <span className="tab-badge">v{selected.version}</span>}
+            </button>
+          </div>
 
-  if (loading) {
+          {activeTab === 'editor' && (
+            <div className="editor-layout">
+              <div className="editor-col">
+                <PromptEditor
+                  title={title}
+                  body={body}
+                  onTitleChange={setTitle}
+                  onBodyChange={setBody}
+                />
+                <TagSelector
+                  selectedIds={selectedTagIds}
+                  onChange={setSelectedTagIds}
+                />
+                <button
+                  className="btn-save"
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? 'Saving…' : selected ? 'Save & Snapshot' : 'Create Prompt'}
+                </button>
+                {selected && (
+                  <p className="current-version-hint">
+                    Current: <strong>v{selected.version}</strong>
+                  </p>
+                )}
+              </div>
+              <div className="preview-col">
+                <VariablePanel
+                  body={body}
+                  values={variables}
+                  onChange={setVariables}
+                />
+                <PreviewPane body={body} variables={variables} />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'history' && selected && (
+            <VersionHistory
+              promptId={selected.id}
+              currentVersion={selected.version}
+              onRestored={handleRestored}
+            />
+          )}
+        </section>
+      </main>
+    </div>
+  );
+}
+
+export default function App() {
+  const [repository, setRepository] = useState<IRepository | null>(null);
+
+  useEffect(() => {
+    initDb().then((db) => {
+      setRepository(createRepository({ backend: 'pglite', db }));
+    });
+  }, []);
+
+  if (!repository) {
     return (
       <div className="app-loading">
         <p>Initialising database…</p>
@@ -87,44 +196,9 @@ function App() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="app-error">
-        <h2>Something went wrong</h2>
-        <pre>{error}</pre>
-      </div>
-    );
-  }
-
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>PromptForge</h1>
-        <p className="app-subtitle">AI Prompt Sandbox &amp; Snippet Manager</p>
-      </header>
-
-      <main className="app-main">
-        {view === 'list' ? (
-          <PromptTable
-            prompts={prompts}
-            allTags={allTags}
-            onSelect={handleSelect}
-            onDelete={handleDelete}
-            onNew={handleNew}
-          />
-        ) : (
-          <PromptEditor
-            key={editing?.id ?? 'new'}
-            prompt={editing}
-            allTags={allTags}
-            onSave={handleSave}
-            onCancel={handleCancel}
-            onNewTag={handleNewTag}
-          />
-        )}
-      </main>
-    </div>
+    <RepositoryContext.Provider value={repository}>
+      <AppContent />
+    </RepositoryContext.Provider>
   );
 }
-
-export default App;

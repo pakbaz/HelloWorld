@@ -1,33 +1,33 @@
-import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 
 interface PreviewPaneProps {
-  markdown: string;
+  body: string;
+  variables: Record<string, string>;
 }
 
-export function PreviewPane({ markdown }: PreviewPaneProps) {
-  const [copied, setCopied] = useState(false);
+function renderBody(body: string, variables: Record<string, string>): string {
+  return body.replace(/\{\{(\w+)\}\}/g, (_, name) =>
+    variables[name] !== undefined && variables[name] !== '' ? variables[name] : `{{${name}}}`
+  );
+}
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(markdown);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
+export function PreviewPane({ body, variables }: PreviewPaneProps) {
+  const rendered = renderBody(body, variables);
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(rendered);
+  }
 
   return (
     <div className="preview-pane">
-      <div className="preview-header">
-        <span className="field-label">Preview</span>
-        <button className="btn-copy" onClick={handleCopy} title="Copy rendered prompt">
-          {copied ? '✓ Copied' : 'Copy'}
+      <div className="pp-header">
+        <h4>Preview</h4>
+        <button className="pp-copy-btn" onClick={handleCopy} title="Copy rendered prompt">
+          📋 Copy
         </button>
       </div>
-      <div className="preview-content">
-        {markdown ? (
-          <ReactMarkdown>{markdown}</ReactMarkdown>
-        ) : (
-          <p className="empty-state">Preview will appear here as you type…</p>
-        )}
+      <div className="pp-content">
+        <ReactMarkdown>{rendered || '*Nothing to preview yet…*'}</ReactMarkdown>
       </div>
     </div>
   );

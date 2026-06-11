@@ -1,4 +1,3 @@
-from .prompts import router as prompts_router
-from .tags import router as tags_router
+from app.routes import prompts, tags, variables
 
-__all__ = ["prompts_router", "tags_router"]
+__all__ = ["prompts", "tags", "variables"]

@@ -1,32 +1,45 @@
-import type { Variable } from '../repository/types';
-
 interface VariablePanelProps {
-  variables: Variable[];
+  body: string;
   values: Record<string, string>;
-  onChange: (name: string, value: string) => void;
+  onChange: (values: Record<string, string>) => void;
 }
 
-export function VariablePanel({ variables, values, onChange }: VariablePanelProps) {
-  if (variables.length === 0) return null;
+function extractPlaceholders(body: string): string[] {
+  return [...new Set([...body.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]))];
+}
+
+export function VariablePanel({ body, values, onChange }: VariablePanelProps) {
+  const placeholders = extractPlaceholders(body);
+
+  if (placeholders.length === 0) {
+    return (
+      <div className="variable-panel variable-panel--empty">
+        <p>No <code>{'{{variable}}'}</code> placeholders detected.</p>
+      </div>
+    );
+  }
+
+  function handleChange(name: string, value: string) {
+    onChange({ ...values, [name]: value });
+  }
 
   return (
     <div className="variable-panel">
-      <h4 className="field-label">Variables</h4>
-      <div className="variable-grid">
-        {variables.map((v) => (
-          <div key={v.name} className="variable-row">
-            <label className="variable-name">
-              <code>{`{{${v.name}}}`}</code>
-            </label>
-            <input
-              className="variable-input"
-              value={values[v.name] ?? ''}
-              onChange={(e) => onChange(v.name, e.target.value)}
-              placeholder={v.default_value ?? `Enter ${v.name}…`}
-            />
-          </div>
-        ))}
-      </div>
+      <h4>Variables</h4>
+      {placeholders.map((name) => (
+        <label key={name} className="vp-field">
+          <span className="vp-label">
+            <code>{`{{${name}}}`}</code>
+          </span>
+          <input
+            type="text"
+            className="vp-input"
+            value={values[name] ?? ''}
+            placeholder={`Value for ${name}`}
+            onChange={(e) => handleChange(name, e.target.value)}
+          />
+        </label>
+      ))}
     </div>
   );
 }

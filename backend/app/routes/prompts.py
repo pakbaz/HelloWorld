@@ -1,24 +1,25 @@
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models.prompt import Prompt, PromptVersion
+from app.models.tag import PromptTag, Tag
+from app.models.variable import Variable
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from ..database import get_db
-from ..models import Prompt, Variable, Tag, PromptTag
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, selectinload
 
 router = APIRouter()
 
 
-class VariableIn(BaseModel):
-    name: str
-    default_value: Optional[str] = None
+# ── Pydantic schemas ──────────────────────────────────────────────────────────
 
 
 class VariableOut(BaseModel):
     id: int
-    prompt_id: int
     name: str
-    default_value: Optional[str] = None
+    default_value: Optional[str]
 
     model_config = {"from_attributes": True}
 
@@ -30,15 +31,23 @@ class TagOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class PromptIn(BaseModel):
+class PromptBase(BaseModel):
     title: str
     body: str = ""
 
 
-class PromptOut(BaseModel):
+class PromptCreate(PromptBase):
+    tag_ids: list[int] = []
+
+
+class PromptUpdate(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+    tag_ids: Optional[list[int]] = None
+
+
+class PromptOut(PromptBase):
     id: int
-    title: str
-    body: str
     version: int
     created_at: datetime
     updated_at: datetime
@@ -48,69 +57,222 @@ class PromptOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.get("/prompts", response_model=list[PromptOut])
-def list_prompts(db: Session = Depends(get_db)):
-    return db.query(Prompt).order_by(Prompt.updated_at.desc(), Prompt.id.desc()).all()
+class VersionOut(BaseModel):
+    id: int
+    prompt_id: int
+    title: str
+    body: str
+    version: int
+    saved_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
-@router.post("/prompts", response_model=PromptOut, status_code=201)
-def create_prompt(payload: PromptIn, db: Session = Depends(get_db)):
-    prompt = Prompt(title=payload.title, body=payload.body)
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _load_prompt(db: Session, prompt_id: int) -> Prompt:
+    prompt = (
+        db.query(Prompt)
+        .options(
+            selectinload(Prompt.variables),
+            selectinload(Prompt.prompt_tags).selectinload(PromptTag.tag),
+        )
+        .filter(Prompt.id == prompt_id)
+        .first()
+    )
+    if prompt is None:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return prompt
+
+
+def _prompt_to_out(prompt: Prompt) -> PromptOut:
+    return PromptOut(
+        id=prompt.id,
+        title=prompt.title,
+        body=prompt.body,
+        version=prompt.version,
+        created_at=prompt.created_at,
+        updated_at=prompt.updated_at,
+        variables=[VariableOut.model_validate(v) for v in prompt.variables],
+        tags=[TagOut.model_validate(pt.tag) for pt in prompt.prompt_tags],
+    )
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+
+@router.get("", response_model=list[PromptOut])
+def list_prompts(
+    q: Optional[str] = Query(None, description="Filter by title substring"),
+    tag: Optional[str] = Query(None, description="Filter by tag name"),
+    sort: str = Query("updated_at", description="Sort field: title | created_at | updated_at"),
+    order: str = Query("desc", description="Sort order: asc | desc"),
+    db: Session = Depends(get_db),
+):
+    query = (
+        db.query(Prompt)
+        .options(
+            selectinload(Prompt.variables),
+            selectinload(Prompt.prompt_tags).selectinload(PromptTag.tag),
+        )
+    )
+
+    if q:
+        query = query.filter(Prompt.title.ilike(f"%{q}%"))
+
+    if tag:
+        query = query.join(Prompt.prompt_tags).join(PromptTag.tag).filter(Tag.name == tag)
+
+    sort_col = {
+        "title": Prompt.title,
+        "created_at": Prompt.created_at,
+        "updated_at": Prompt.updated_at,
+    }.get(sort, Prompt.updated_at)
+
+    if order == "asc":
+        query = query.order_by(sort_col.asc())
+    else:
+        query = query.order_by(sort_col.desc())
+
+    return [_prompt_to_out(p) for p in query.all()]
+
+
+@router.post("", response_model=PromptOut, status_code=201)
+def create_prompt(payload: PromptCreate, db: Session = Depends(get_db)):
+    prompt = Prompt(title=payload.title, body=payload.body, version=1)
     db.add(prompt)
+    db.flush()
+
+    for tag_id in payload.tag_ids:
+        tag = db.query(Tag).filter(Tag.id == tag_id).first()
+        if tag is None:
+            raise HTTPException(status_code=404, detail=f"Tag {tag_id} not found")
+        db.add(PromptTag(prompt_id=prompt.id, tag_id=tag_id))
+
     db.commit()
     db.refresh(prompt)
-    return prompt
+    return _prompt_to_out(_load_prompt(db, prompt.id))
 
 
-@router.get("/prompts/{prompt_id}", response_model=PromptOut)
+@router.get("/{prompt_id}", response_model=PromptOut)
 def get_prompt(prompt_id: int, db: Session = Depends(get_db)):
-    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
-    if not prompt:
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    return prompt
+    return _prompt_to_out(_load_prompt(db, prompt_id))
 
 
-@router.put("/prompts/{prompt_id}", response_model=PromptOut)
-def update_prompt(prompt_id: int, payload: PromptIn, db: Session = Depends(get_db)):
-    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
-    if not prompt:
-        raise HTTPException(status_code=404, detail="Prompt not found")
-    prompt.title = payload.title
-    prompt.body = payload.body
+@router.put("/{prompt_id}", response_model=PromptOut)
+def update_prompt(prompt_id: int, payload: PromptUpdate, db: Session = Depends(get_db)):
+    prompt = _load_prompt(db, prompt_id)
+
+    # Save a version snapshot before modifying
+    db.add(
+        PromptVersion(
+            prompt_id=prompt.id,
+            title=prompt.title,
+            body=prompt.body,
+            version=prompt.version,
+        )
+    )
+
+    if payload.title is not None:
+        prompt.title = payload.title
+    if payload.body is not None:
+        prompt.body = payload.body
+
     prompt.version += 1
-    prompt.updated_at = datetime.utcnow()
+
+    if payload.tag_ids is not None:
+        db.query(PromptTag).filter(PromptTag.prompt_id == prompt_id).delete()
+        for tag_id in payload.tag_ids:
+            tag = db.query(Tag).filter(Tag.id == tag_id).first()
+            if tag is None:
+                raise HTTPException(status_code=404, detail=f"Tag {tag_id} not found")
+            db.add(PromptTag(prompt_id=prompt.id, tag_id=tag_id))
+
     db.commit()
     db.refresh(prompt)
-    return prompt
+    return _prompt_to_out(_load_prompt(db, prompt.id))
 
 
-@router.delete("/prompts/{prompt_id}", status_code=204)
+@router.delete("/{prompt_id}", status_code=204)
 def delete_prompt(prompt_id: int, db: Session = Depends(get_db)):
     prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
-    if not prompt:
+    if prompt is None:
         raise HTTPException(status_code=404, detail="Prompt not found")
     db.delete(prompt)
     db.commit()
 
 
-@router.get("/prompts/{prompt_id}/variables", response_model=list[VariableOut])
-def list_variables(prompt_id: int, db: Session = Depends(get_db)):
-    return db.query(Variable).filter(Variable.prompt_id == prompt_id).order_by(Variable.name).all()
+@router.get("/{prompt_id}/versions", response_model=list[VersionOut])
+def list_versions(prompt_id: int, db: Session = Depends(get_db)):
+    _load_prompt(db, prompt_id)
+    versions = (
+        db.query(PromptVersion)
+        .filter(PromptVersion.prompt_id == prompt_id)
+        .order_by(PromptVersion.version.desc())
+        .all()
+    )
+    return [VersionOut.model_validate(v) for v in versions]
 
 
-@router.put("/prompts/{prompt_id}/variables", response_model=list[VariableOut])
-def replace_variables(prompt_id: int, variables: list[VariableIn], db: Session = Depends(get_db)):
-    db.query(Variable).filter(Variable.prompt_id == prompt_id).delete()
-    new_vars = [Variable(prompt_id=prompt_id, name=v.name, default_value=v.default_value) for v in variables]
-    db.add_all(new_vars)
+@router.post("/{prompt_id}/versions/{version_id}/restore", response_model=PromptOut)
+def restore_version(prompt_id: int, version_id: int, db: Session = Depends(get_db)):
+    snapshot = (
+        db.query(PromptVersion)
+        .filter(
+            PromptVersion.prompt_id == prompt_id,
+            PromptVersion.id == version_id,
+        )
+        .first()
+    )
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    prompt = _load_prompt(db, prompt_id)
+
+    # Save current state as a version snapshot
+    db.add(
+        PromptVersion(
+            prompt_id=prompt.id,
+            title=prompt.title,
+            body=prompt.body,
+            version=prompt.version,
+        )
+    )
+
+    prompt.title = snapshot.title
+    prompt.body = snapshot.body
+    prompt.version += 1
+
     db.commit()
-    return db.query(Variable).filter(Variable.prompt_id == prompt_id).order_by(Variable.name).all()
+    db.refresh(prompt)
+    return _prompt_to_out(_load_prompt(db, prompt.id))
 
 
-@router.put("/prompts/{prompt_id}/tags", status_code=204)
-def set_prompt_tags(prompt_id: int, payload: dict, db: Session = Depends(get_db)):
-    tag_ids: list[int] = payload.get("tag_ids", [])
-    db.query(PromptTag).filter(PromptTag.prompt_id == prompt_id).delete()
-    for tag_id in tag_ids:
+@router.post("/{prompt_id}/tags/{tag_id}", response_model=PromptOut)
+def add_tag_to_prompt(prompt_id: int, tag_id: int, db: Session = Depends(get_db)):
+    prompt = _load_prompt(db, prompt_id)
+    tag = db.query(Tag).filter(Tag.id == tag_id).first()
+    if tag is None:
+        raise HTTPException(status_code=404, detail="Tag not found")
+
+    existing = (
+        db.query(PromptTag)
+        .filter(PromptTag.prompt_id == prompt_id, PromptTag.tag_id == tag_id)
+        .first()
+    )
+    if existing is None:
         db.add(PromptTag(prompt_id=prompt_id, tag_id=tag_id))
+        db.commit()
+
+    return _prompt_to_out(_load_prompt(db, prompt_id))
+
+
+@router.delete("/{prompt_id}/tags/{tag_id}", response_model=PromptOut)
+def remove_tag_from_prompt(prompt_id: int, tag_id: int, db: Session = Depends(get_db)):
+    _load_prompt(db, prompt_id)
+    db.query(PromptTag).filter(
+        PromptTag.prompt_id == prompt_id, PromptTag.tag_id == tag_id
+    ).delete()
     db.commit()
+    return _prompt_to_out(_load_prompt(db, prompt_id))

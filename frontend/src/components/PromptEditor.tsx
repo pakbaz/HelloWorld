@@ -1,119 +1,55 @@
-import { useState, useMemo } from 'react';
-import type { ChangeEvent } from 'react';
-import type { Prompt, Variable, Tag } from '../repository/types';
-import { VariablePanel } from './VariablePanel';
-import { PreviewPane } from './PreviewPane';
-import { TagSelector } from './TagSelector';
+import { useEffect, useRef } from 'react';
 
 interface PromptEditorProps {
-  prompt: Prompt | null;
-  allTags: Tag[];
-  onSave: (prompt: Prompt, variables: Variable[], tagIds: number[]) => Promise<void>;
-  onCancel: () => void;
-  onNewTag: (name: string) => Promise<Tag>;
+  title: string;
+  body: string;
+  onTitleChange: (v: string) => void;
+  onBodyChange: (v: string) => void;
 }
 
-function parsePlaceholders(body: string): string[] {
-  const matches = body.match(/\{\{(\w+)\}\}/g) ?? [];
-  const unique = [...new Set(matches.map((m) => m.slice(2, -2)))];
-  return unique;
-}
+export function PromptEditor({
+  title,
+  body,
+  onTitleChange,
+  onBodyChange,
+}: PromptEditorProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-export function PromptEditor({ prompt, allTags, onSave, onCancel, onNewTag }: PromptEditorProps) {
-  // Initialize state from prop directly (component is reset via key prop in parent)
-  const [title, setTitle] = useState(prompt?.title ?? '');
-  const [body, setBody] = useState(prompt?.body ?? '');
-  const [savedVariables] = useState<Variable[]>(prompt?.variables ?? []);
-  const [varValues, setVarValues] = useState<Record<string, string>>(() => {
-    const defaults: Record<string, string> = {};
-    for (const v of prompt?.variables ?? []) {
-      defaults[v.name] = v.default_value ?? '';
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
-    return defaults;
-  });
-  const [selectedTagIds, setSelectedTagIds] = useState<number[]>(
-    () => (prompt?.tags ?? []).map((t) => t.id!)
-  );
-  const [saving, setSaving] = useState(false);
+  }, [body]);
 
-  // Derive variables from body placeholders; preserve saved metadata
-  const variables = useMemo<Variable[]>(() => {
-    const names = parsePlaceholders(body);
-    const byName = new Map(savedVariables.map((v) => [v.name, v]));
-    return names.map((name) => byName.get(name) ?? { name, default_value: '' });
-  }, [body, savedVariables]);
-
-  const handleBodyChange = (e: ChangeEvent<HTMLTextAreaElement>) => setBody(e.target.value);
-
-  const handleSave = async () => {
-    if (!title.trim()) return;
-    setSaving(true);
-    try {
-      const enrichedVars = variables.map((v) => ({
-        ...v,
-        default_value: varValues[v.name] ?? v.default_value ?? '',
-      }));
-      await onSave(
-        { ...prompt, title: title.trim(), body },
-        enrichedVars,
-        selectedTagIds
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const renderedBody = body.replace(/\{\{(\w+)\}\}/g, (_, name) => varValues[name] ?? `{{${name}}}`);
+  // Highlight {{placeholders}} in the textarea overlay is complex;
+  // we keep it simple: just show a character count and placeholder count.
+  const placeholders = [...new Set([...body.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]))];
 
   return (
     <div className="prompt-editor">
-      <div className="editor-header">
-        <input
-          className="title-input"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Prompt title…"
-        />
-        <div className="editor-actions">
-          <button className="btn-secondary" onClick={onCancel}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saving || !title.trim()}>
-            {saving ? 'Saving…' : prompt?.id ? 'Save' : 'Create'}
-          </button>
-        </div>
-      </div>
-
-      <TagSelector
-        allTags={allTags}
-        selectedIds={selectedTagIds}
-        onChange={setSelectedTagIds}
-        onNewTag={onNewTag}
+      <input
+        className="pe-title"
+        type="text"
+        placeholder="Prompt title"
+        value={title}
+        onChange={(e) => onTitleChange(e.target.value)}
       />
-
-      <div className="editor-body">
-        <div className="editor-left">
-          <label className="field-label">Prompt Body</label>
-          <textarea
-            className="body-textarea"
-            value={body}
-            onChange={handleBodyChange}
-            placeholder="Write your prompt here… use {{variable}} placeholders."
-            rows={12}
-          />
-          {variables.length > 0 && (
-            <VariablePanel
-              variables={variables}
-              values={varValues}
-              onChange={(name, val) => setVarValues((prev) => ({ ...prev, [name]: val }))}
-            />
-          )}
-        </div>
-        <div className="editor-right">
-          <PreviewPane markdown={renderedBody} />
-        </div>
-      </div>
-
-      {prompt?.id && (
-        <div className="version-info">Version {prompt.version}</div>
+      <textarea
+        ref={textareaRef}
+        className="pe-body"
+        placeholder="Write your prompt here… use {{variable}} for dynamic placeholders."
+        value={body}
+        onChange={(e) => onBodyChange(e.target.value)}
+        rows={8}
+      />
+      {placeholders.length > 0 && (
+        <p className="pe-placeholder-hint">
+          Detected placeholders:{' '}
+          {placeholders.map((p) => (
+            <code key={p}>{`{{${p}}}`}</code>
+          ))}
+        </p>
       )}
     </div>
   );
