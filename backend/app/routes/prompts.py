@@ -215,13 +215,13 @@ def list_versions(prompt_id: int, db: Session = Depends(get_db)):
     return [VersionOut.model_validate(v) for v in versions]
 
 
-@router.post("/{prompt_id}/restore/{version}", response_model=PromptOut)
-def restore_version(prompt_id: int, version: int, db: Session = Depends(get_db)):
+@router.post("/{prompt_id}/versions/{version_id}/restore", response_model=PromptOut)
+def restore_version(prompt_id: int, version_id: int, db: Session = Depends(get_db)):
     snapshot = (
         db.query(PromptVersion)
         .filter(
             PromptVersion.prompt_id == prompt_id,
-            PromptVersion.version == version,
+            PromptVersion.id == version_id,
         )
         .first()
     )

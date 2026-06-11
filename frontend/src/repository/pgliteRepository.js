@@ -72,16 +72,7 @@ class PGliteRepository {
         [prompt.title, prompt.body, prompt.id]
       );
 
-      const saved = rows[0];
-
-      // Write immutable snapshot (FR-11)
-      await this.db.query(
-        `INSERT INTO prompt_versions (prompt_id, version, title, body, saved_at)
-         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
-        [saved.id, saved.version, saved.title, saved.body]
-      );
-
-      return saved;
+      return this.#saveSnapshot(rows[0]);
     }
 
     const rows = await this.#rows(
@@ -91,15 +82,16 @@ class PGliteRepository {
       [prompt.title, prompt.body]
     );
 
-    const saved = rows[0];
+    return this.#saveSnapshot(rows[0]);
+  }
 
-    // Write immutable snapshot for the initial version (FR-11)
+  /** Write an immutable snapshot and return the saved prompt (FR-11). */
+  async #saveSnapshot(saved) {
     await this.db.query(
       `INSERT INTO prompt_versions (prompt_id, version, title, body, saved_at)
        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
       [saved.id, saved.version, saved.title, saved.body]
     );
-
     return saved;
   }
 
