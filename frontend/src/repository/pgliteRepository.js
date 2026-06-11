@@ -72,7 +72,7 @@ class PGliteRepository {
         [prompt.title, prompt.body, prompt.id]
       );
 
-      return rows[0];
+      return this.#saveSnapshot(rows[0]);
     }
 
     const rows = await this.#rows(
@@ -82,7 +82,17 @@ class PGliteRepository {
       [prompt.title, prompt.body]
     );
 
-    return rows[0];
+    return this.#saveSnapshot(rows[0]);
+  }
+
+  /** Write an immutable snapshot and return the saved prompt (FR-11). */
+  async #saveSnapshot(saved) {
+    await this.db.query(
+      `INSERT INTO prompt_versions (prompt_id, version, title, body, saved_at)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+      [saved.id, saved.version, saved.title, saved.body]
+    );
+    return saved;
   }
 
   async deletePrompt(promptId) {
@@ -173,10 +183,33 @@ class PGliteRepository {
     }
   }
 
+  async getVersions(promptId) {
+    return this.#rows(
+      `SELECT id, prompt_id, version, title, body, saved_at
+       FROM prompt_versions
+       WHERE prompt_id = $1
+       ORDER BY version DESC`,
+      [promptId]
+    );
+  }
+
+  async restoreVersion(promptId, versionId) {
+    const rows = await this.#rows(
+      `SELECT title, body FROM prompt_versions WHERE id = $1 AND prompt_id = $2`,
+      [versionId, promptId]
+    );
+
+    if (rows.length === 0) {
+      throw new Error(`Version ${versionId} not found for prompt ${promptId}`);
+    }
+
+    return this.savePrompt({ id: promptId, title: rows[0].title, body: rows[0].body });
+  }
+
   async #rows(sql, params) {
     const result = await this.db.query(sql, params);
     return result && Array.isArray(result.rows) ? result.rows : [];
   }
 }
 
-module.exports = { PGliteRepository };
+export { PGliteRepository };

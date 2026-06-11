@@ -62,6 +62,16 @@ class HttpRepository {
     });
   }
 
+  async getVersions(promptId) {
+    return this.#request(`/prompts/${promptId}/versions`);
+  }
+
+  async restoreVersion(promptId, versionId) {
+    return this.#request(`/prompts/${promptId}/versions/${versionId}/restore`, {
+      method: 'POST',
+    });
+  }
+
   async #request(path, options = {}) {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       headers: {
@@ -84,4 +94,4 @@ class HttpRepository {
   }
 }
 
-module.exports = { HttpRepository };
+export { HttpRepository };

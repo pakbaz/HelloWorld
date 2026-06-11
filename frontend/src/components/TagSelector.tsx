@@ -1,124 +1,61 @@
-import { useState, useMemo, useCallback } from 'react';
-import type { Tag } from '../repository/types';
+import { useEffect, useState } from 'react';
+import type { Tag } from '../db/RepositoryContext';
+import { useRepository } from '../db/RepositoryContext';
 
 interface TagSelectorProps {
-  allTags: Tag[];
   selectedIds: number[];
   onChange: (ids: number[]) => void;
-  onCreateTag: (name: string) => Promise<Tag>;
 }
 
-export default function TagSelector({ allTags, selectedIds, onChange, onCreateTag }: TagSelectorProps) {
-  const [input, setInput] = useState('');
-  const [creating, setCreating] = useState(false);
+export function TagSelector({ selectedIds, onChange }: TagSelectorProps) {
+  const repository = useRepository();
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [newTag, setNewTag] = useState('');
 
-  const selectedTags = useMemo(
-    () => allTags.filter((t) => selectedIds.includes(t.id)),
-    [allTags, selectedIds],
-  );
+  useEffect(() => {
+    repository.getTags().then(setTags);
+  }, [repository]);
 
-  const unselectedTags = useMemo(
-    () => allTags.filter((t) => !selectedIds.includes(t.id)),
-    [allTags, selectedIds],
-  );
-
-  const filtered = useMemo(
-    () =>
-      input.trim()
-        ? unselectedTags.filter((t) => t.name.toLowerCase().includes(input.toLowerCase()))
-        : unselectedTags,
-    [unselectedTags, input],
-  );
-
-  const handleSelect = useCallback(
-    (id: number) => {
+  function toggle(id: number) {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter((x) => x !== id));
+    } else {
       onChange([...selectedIds, id]);
-      setInput('');
-    },
-    [selectedIds, onChange],
-  );
-
-  const handleRemove = useCallback(
-    (id: number) => {
-      onChange(selectedIds.filter((sid) => sid !== id));
-    },
-    [selectedIds, onChange],
-  );
-
-  const handleCreate = useCallback(async () => {
-    const name = input.trim();
-    if (!name) return;
-    setCreating(true);
-    try {
-      const tag = await onCreateTag(name);
-      onChange([...selectedIds, tag.id]);
-      setInput('');
-    } finally {
-      setCreating(false);
     }
-  }, [input, selectedIds, onChange, onCreateTag]);
+  }
 
-  const exactMatch = allTags.some((t) => t.name.toLowerCase() === input.trim().toLowerCase());
-  const showCreate = input.trim() && !exactMatch;
+  async function handleCreate() {
+    const name = newTag.trim();
+    if (!name) return;
+    const tag = await repository.saveTag({ name });
+    setTags((prev) => (prev.find((t) => t.id === tag.id) ? prev : [...prev, tag]));
+    onChange([...selectedIds, tag.id]);
+    setNewTag('');
+  }
 
   return (
     <div className="tag-selector">
-      {/* Selected tags */}
-      <div className="tag-selector__selected">
-        {selectedTags.map((tag) => (
-          <span key={tag.id} className="tag-chip">
-            {tag.name}
-            <button
-              type="button"
-              className="tag-chip__remove"
-              onClick={() => handleRemove(tag.id)}
-              aria-label={`Remove tag ${tag.name}`}
-            >
-              ×
-            </button>
-          </span>
+      <h4>Tags</h4>
+      <div className="ts-tags">
+        {tags.map((t) => (
+          <button
+            key={t.id}
+            className={`ts-tag${selectedIds.includes(t.id) ? ' ts-tag--selected' : ''}`}
+            onClick={() => toggle(t.id)}
+          >
+            {t.name}
+          </button>
         ))}
       </div>
-
-      {/* Input + dropdown */}
-      <div className="tag-selector__input-wrap">
+      <div className="ts-new">
         <input
           type="text"
-          className="tag-selector__input"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Add tag…"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              if (filtered.length > 0 && !showCreate) handleSelect(filtered[0].id);
-              else if (showCreate) handleCreate();
-            }
-          }}
+          placeholder="New tag…"
+          value={newTag}
+          onChange={(e) => setNewTag(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
         />
-        {(filtered.length > 0 || showCreate) && (
-          <ul className="tag-selector__dropdown">
-            {filtered.map((tag) => (
-              <li key={tag.id}>
-                <button type="button" onClick={() => handleSelect(tag.id)}>
-                  {tag.name}
-                </button>
-              </li>
-            ))}
-            {showCreate && (
-              <li>
-                <button
-                  type="button"
-                  className="tag-selector__create-btn"
-                  onClick={handleCreate}
-                  disabled={creating}
-                >
-                  {creating ? 'Creating…' : `Create "${input.trim()}"`}
-                </button>
-              </li>
-            )}
-          </ul>
-        )}
+        <button onClick={handleCreate}>Add</button>
       </div>
     </div>
   );

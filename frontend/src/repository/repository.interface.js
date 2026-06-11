@@ -9,6 +9,16 @@
  */
 
 /**
+ * @typedef {Object} PromptVersion
+ * @property {string|number} id
+ * @property {string|number} prompt_id
+ * @property {number} version
+ * @property {string} title
+ * @property {string} body
+ * @property {string} saved_at
+ */
+
+/**
  * @typedef {Object} Variable
  * @property {string|number} [id]
  * @property {string|number} prompt_id
@@ -35,5 +45,7 @@
  * saveTag(tag: Tag): Promise<Tag>
  * deleteTag(tagId: string|number): Promise<void>
  * setPromptTags(promptId: string|number, tagIds: Array<string|number>): Promise<void>
+ * getVersions(promptId: string|number): Promise<PromptVersion[]>
+ * restoreVersion(promptId: string|number, versionId: string|number): Promise<Prompt>
  */
-module.exports = {};
+export {};

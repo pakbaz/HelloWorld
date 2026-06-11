@@ -1,37 +1,77 @@
-import React from 'react';
-
-export interface VersionSnapshot {
-  version: number;
-  body: string;
-  saved_at: string;
-}
+import { useEffect, useState } from 'react';
+import type { PromptVersion } from '../db/RepositoryContext';
+import { useRepository } from '../db/RepositoryContext';
 
 interface VersionHistoryProps {
-  snapshots: VersionSnapshot[];
-  onRestore: (snapshot: VersionSnapshot) => void;
+  promptId: number;
+  currentVersion: number;
+  onRestored: () => void;
 }
 
-const VersionHistory: React.FC<VersionHistoryProps> = ({ snapshots, onRestore }) => {
-  if (snapshots.length === 0) {
-    return <p>No version history available.</p>;
+export function VersionHistory({
+  promptId,
+  currentVersion,
+  onRestored,
+}: VersionHistoryProps) {
+  const repository = useRepository();
+  const [versions, setVersions] = useState<PromptVersion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [restoring, setRestoring] = useState<number | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    repository
+      .getVersions(promptId)
+      .then(setVersions)
+      .finally(() => setLoading(false));
+  }, [repository, promptId, currentVersion]);
+
+  async function handleRestore(v: PromptVersion) {
+    if (v.version === currentVersion) return;
+    if (!confirm(`Restore version ${v.version}? This will create a new snapshot on top of history.`)) return;
+    setRestoring(v.id);
+    try {
+      await repository.restoreVersion(promptId, v.id);
+      onRestored();
+    } finally {
+      setRestoring(null);
+    }
   }
 
-  return (
-    <ul style={{ listStyle: 'none', padding: 0 }}>
-      {snapshots.map((snapshot) => (
-        <li
-          key={snapshot.version}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}
-        >
-          <span>v{snapshot.version}</span>
-          <span style={{ color: '#888', fontSize: '0.85em' }}>
-            {new Date(snapshot.saved_at).toLocaleString()}
-          </span>
-          <button onClick={() => onRestore(snapshot)}>Restore</button>
-        </li>
-      ))}
-    </ul>
-  );
-};
+  if (loading) return <p className="vh-loading">Loading history…</p>;
+  if (versions.length === 0) return <p className="vh-empty">No versions saved yet.</p>;
 
-export default VersionHistory;
+  return (
+    <div className="version-history">
+      <h3 className="vh-title">Version History</h3>
+      <ol className="vh-timeline">
+        {versions.map((v) => {
+          const isCurrent = v.version === currentVersion;
+          return (
+            <li key={v.id} className={`vh-item${isCurrent ? ' vh-item--current' : ''}`}>
+              <span className="vh-badge">v{v.version}</span>
+              <span className="vh-meta">
+                <strong>{v.title}</strong>
+                <time dateTime={v.saved_at}>
+                  {new Date(v.saved_at).toLocaleString()}
+                </time>
+              </span>
+              <span className="vh-preview">{v.body.slice(0, 80)}{v.body.length > 80 ? '…' : ''}</span>
+              {isCurrent ? (
+                <span className="vh-current-label">Current</span>
+              ) : (
+                <button
+                  className="vh-restore-btn"
+                  disabled={restoring === v.id}
+                  onClick={() => handleRestore(v)}
+                >
+                  {restoring === v.id ? 'Restoring…' : 'Restore'}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
