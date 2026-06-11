@@ -20,9 +20,7 @@ export function TagSelector({ allTags, selectedIds, onChange, onNewTag }: TagSel
     );
   };
 
-  const handleKeyDown = async (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== 'Enter') return;
-    const name = input.trim();
+  const submitInput = async (name: string) => {
     if (!name) return;
     const existing = allTags.find((t) => t.name.toLowerCase() === name.toLowerCase());
     if (existing) {
@@ -39,6 +37,11 @@ export function TagSelector({ allTags, selectedIds, onChange, onNewTag }: TagSel
       }
     }
     setInput('');
+  };
+
+  const handleKeyDown = async (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    await submitInput(input.trim());
   };
 
   const filtered = input.trim()
@@ -79,7 +82,7 @@ export function TagSelector({ allTags, selectedIds, onChange, onNewTag }: TagSel
           {!filtered.find((t) => t.name.toLowerCase() === input.trim().toLowerCase()) && (
             <div
               className="tag-option create-new"
-              onClick={() => { handleKeyDown({ key: 'Enter' } as KeyboardEvent<HTMLInputElement>); }}
+              onClick={() => { void submitInput(input.trim()); }}
             >
               Create &ldquo;{input.trim()}&rdquo;
             </div>

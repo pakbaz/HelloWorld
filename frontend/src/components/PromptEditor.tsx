@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import type { ChangeEvent } from 'react';
 import type { Prompt, Variable, Tag } from '../repository/types';
 import { VariablePanel } from './VariablePanel';
@@ -20,41 +20,28 @@ function parsePlaceholders(body: string): string[] {
 }
 
 export function PromptEditor({ prompt, allTags, onSave, onCancel, onNewTag }: PromptEditorProps) {
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [variables, setVariables] = useState<Variable[]>([]);
-  const [varValues, setVarValues] = useState<Record<string, string>>({});
-  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  // Initialize state from prop directly (component is reset via key prop in parent)
+  const [title, setTitle] = useState(prompt?.title ?? '');
+  const [body, setBody] = useState(prompt?.body ?? '');
+  const [savedVariables] = useState<Variable[]>(prompt?.variables ?? []);
+  const [varValues, setVarValues] = useState<Record<string, string>>(() => {
+    const defaults: Record<string, string> = {};
+    for (const v of prompt?.variables ?? []) {
+      defaults[v.name] = v.default_value ?? '';
+    }
+    return defaults;
+  });
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>(
+    () => (prompt?.tags ?? []).map((t) => t.id!)
+  );
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (prompt) {
-      setTitle(prompt.title);
-      setBody(prompt.body);
-      setVariables(prompt.variables ?? []);
-      setSelectedTagIds((prompt.tags ?? []).map((t) => t.id!));
-      const defaults: Record<string, string> = {};
-      for (const v of prompt.variables ?? []) {
-        defaults[v.name] = v.default_value ?? '';
-      }
-      setVarValues(defaults);
-    } else {
-      setTitle('');
-      setBody('');
-      setVariables([]);
-      setVarValues({});
-      setSelectedTagIds([]);
-    }
-  }, [prompt]);
-
-  // Sync variables list when body placeholders change
-  useEffect(() => {
+  // Derive variables from body placeholders; preserve saved metadata
+  const variables = useMemo<Variable[]>(() => {
     const names = parsePlaceholders(body);
-    setVariables((prev) => {
-      const byName = new Map(prev.map((v) => [v.name, v]));
-      return names.map((name) => byName.get(name) ?? { name, default_value: '' });
-    });
-  }, [body]);
+    const byName = new Map(savedVariables.map((v) => [v.name, v]));
+    return names.map((name) => byName.get(name) ?? { name, default_value: '' });
+  }, [body, savedVariables]);
 
   const handleBodyChange = (e: ChangeEvent<HTMLTextAreaElement>) => setBody(e.target.value);
 

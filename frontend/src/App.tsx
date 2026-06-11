@@ -16,17 +16,6 @@ function App() {
   const [view, setView] = useState<View>('list');
   const [editing, setEditing] = useState<Prompt | null>(null);
 
-  useEffect(() => {
-    getRepository()
-      .then((r) => {
-        setRepo(r);
-      })
-      .catch((err) => {
-        setError(String(err));
-        setLoading(false);
-      });
-  }, []);
-
   const refresh = useCallback(async (r: IRepository) => {
     const [ps, ts] = await Promise.all([r.getPrompts(), r.getTags()]);
     setPrompts(ps);
@@ -34,11 +23,23 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!repo) return;
-    refresh(repo)
-      .catch((err) => setError(String(err)))
-      .finally(() => setLoading(false));
-  }, [repo, refresh]);
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const r = await getRepository();
+        if (cancelled) return;
+        await refresh(r);
+        if (!cancelled) setRepo(r);
+      } catch (err) {
+        if (!cancelled) setError(String(err));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [refresh]);
 
   const handleNew = () => {
     setEditing(null);
@@ -113,6 +114,7 @@ function App() {
           />
         ) : (
           <PromptEditor
+            key={editing?.id ?? 'new'}
             prompt={editing}
             allTags={allTags}
             onSave={handleSave}
