@@ -39,3 +39,27 @@ export interface PagedResult<T> {
   page: number;
   pageSize: number;
 }
+
+export interface PromptVersion {
+  id: number;
+  prompt_id: number;
+  version: number;
+  title: string;
+  body: string;
+  saved_at: string;
+}
+
+export interface IRepository {
+  getPrompts(): Promise<Prompt[]>;
+  savePrompt(prompt: Partial<Prompt> & { title: string; body: string }): Promise<Prompt>;
+  deletePrompt(promptId: number): Promise<void>;
+  getVariables(promptId: number): Promise<Variable[]>;
+  saveVariables(promptId: number, variables: Variable[]): Promise<Variable[]>;
+  deleteVariable(variableId: number): Promise<void>;
+  getTags(): Promise<Tag[]>;
+  saveTag(tag: Partial<Tag> & { name: string }): Promise<Tag>;
+  deleteTag(tagId: number): Promise<void>;
+  setPromptTags(promptId: number, tagIds: number[]): Promise<void>;
+  getVersions(promptId: number): Promise<PromptVersion[]>;
+  restoreVersion(promptId: number, versionId: number): Promise<Prompt>;
+}
