@@ -14,16 +14,46 @@ class PGliteRepository {
        ORDER BY updated_at DESC, id DESC`
     );
 
+    if (prompts.length === 0) {
+      return prompts;
+    }
+
+    const promptIds = prompts.map((prompt) => prompt.id);
+    const variablesByPromptId = new Map();
+    const tagsByPromptId = new Map();
+
+    const variableRows = await this.#rows(
+      `SELECT id, prompt_id, name, default_value
+       FROM variables
+       WHERE prompt_id = ANY($1)
+       ORDER BY prompt_id ASC, name ASC`,
+      [promptIds]
+    );
+
+    for (const variable of variableRows) {
+      const variables = variablesByPromptId.get(variable.prompt_id) || [];
+      variables.push(variable);
+      variablesByPromptId.set(variable.prompt_id, variables);
+    }
+
+    const tagRows = await this.#rows(
+      `SELECT pt.prompt_id, t.id, t.name
+       FROM prompt_tags pt
+       JOIN tags t ON t.id = pt.tag_id
+       WHERE pt.prompt_id = ANY($1)
+       ORDER BY pt.prompt_id ASC, t.name ASC`,
+      [promptIds]
+    );
+
+    for (const tag of tagRows) {
+      const promptTags = tagsByPromptId.get(tag.prompt_id) || [];
+      promptTags.push({ id: tag.id, name: tag.name });
+      tagsByPromptId.set(tag.prompt_id, promptTags);
+    }
+
     for (const prompt of prompts) {
-      prompt.variables = await this.getVariables(prompt.id);
-      prompt.tags = await this.#rows(
-        `SELECT t.id, t.name
-         FROM tags t
-         JOIN prompt_tags pt ON pt.tag_id = t.id
-         WHERE pt.prompt_id = $1
-         ORDER BY t.name ASC`,
-        [prompt.id]
-      );
+      prompt.variables = variablesByPromptId.get(prompt.id) || [];
+      prompt.tags = tagsByPromptId.get(prompt.id) || [];
     }
 
     return prompts;
@@ -72,11 +102,22 @@ class PGliteRepository {
   async saveVariables(promptId, variables) {
     await this.db.query('DELETE FROM variables WHERE prompt_id = $1', [promptId]);
 
-    for (const variable of variables) {
+    if (variables.length > 0) {
+      const values = [];
+      const placeholders = [];
+
+      for (const variable of variables) {
+        const parameterIndex = values.length + 1;
+        placeholders.push(
+          `($${parameterIndex}, $${parameterIndex + 1}, $${parameterIndex + 2})`
+        );
+        values.push(promptId, variable.name, variable.default_value ?? null);
+      }
+
       await this.db.query(
         `INSERT INTO variables (prompt_id, name, default_value)
-         VALUES ($1, $2, $3)`,
-        [promptId, variable.name, variable.default_value ?? null]
+         VALUES ${placeholders.join(', ')}`,
+        values
       );
     }
 
@@ -114,10 +155,20 @@ class PGliteRepository {
   async setPromptTags(promptId, tagIds) {
     await this.db.query('DELETE FROM prompt_tags WHERE prompt_id = $1', [promptId]);
 
-    for (const tagId of tagIds) {
+    if (tagIds.length > 0) {
+      const values = [];
+      const placeholders = [];
+
+      for (const tagId of tagIds) {
+        const parameterIndex = values.length + 1;
+        placeholders.push(`($${parameterIndex}, $${parameterIndex + 1})`);
+        values.push(promptId, tagId);
+      }
+
       await this.db.query(
-        'INSERT INTO prompt_tags (prompt_id, tag_id) VALUES ($1, $2)',
-        [promptId, tagId]
+        `INSERT INTO prompt_tags (prompt_id, tag_id)
+         VALUES ${placeholders.join(', ')}`,
+        values
       );
     }
   }
