@@ -73,9 +73,9 @@ def update_variable(
     if variable is None:
         raise HTTPException(status_code=404, detail="Variable not found")
 
-    if payload.name is not None:
+    if "name" in payload.model_fields_set:
         variable.name = payload.name
-    if payload.default_value is not None:
+    if "default_value" in payload.model_fields_set:
         variable.default_value = payload.default_value
 
     db.commit()
