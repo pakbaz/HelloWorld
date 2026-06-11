@@ -6,7 +6,7 @@ A dedicated, lightweight developer tool for organizing, versioning, and testing 
 
 ---
 
-## Why PromptForge is a Great GitHub Copilot Demo
+## Features
 
 - **Rich SQL Relationships** — Requires relational tables (`Prompts`, `Variables`, `Tags`), giving Copilot an opportunity to showcase database design and query generation.
 - **Algorithmic Utilities** — Parsing template placeholders (e.g., swapping `{{variable}}` inside a string with user-supplied values) provides a clear, programmatic string-manipulation task for Copilot to implement.
