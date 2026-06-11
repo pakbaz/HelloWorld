@@ -1,4 +1,4 @@
-import { initDb } from '../db/index';
+import { initDb } from '../db';
 import { HttpRepository } from './httpRepository';
 import { PGliteRepository } from './pgliteRepository';
 import type { IRepository } from './types';
