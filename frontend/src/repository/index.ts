@@ -3,7 +3,7 @@ import { HttpRepository } from './httpRepository';
 import { PGliteRepository } from './pgliteRepository';
 import type { IRepository } from './types';
 
-export type { IRepository, Prompt, Variable, Tag } from './types';
+export type { IRepository, Prompt, Variable, Tag, PromptVersion } from './types';
 export { HttpRepository } from './httpRepository';
 export { PGliteRepository } from './pgliteRepository';
 

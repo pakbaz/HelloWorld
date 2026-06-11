@@ -6,8 +6,7 @@ import { PreviewPane } from './components/PreviewPane';
 import { TagSelector } from './components/TagSelector';
 import { PromptTable } from './components/PromptTable';
 import { VersionHistory } from './components/VersionHistory';
-import { initDb } from './db/index';
-import { createRepository } from './repository/index.js';
+import { getRepository } from './repository/index.ts';
 import { RepositoryContext, useRepository, type IRepository, type Prompt } from './db/RepositoryContext';
 
 type ActiveTab = 'editor' | 'history';
@@ -183,9 +182,7 @@ export default function App() {
   const [repository, setRepository] = useState<IRepository | null>(null);
 
   useEffect(() => {
-    initDb().then((db) => {
-      setRepository(createRepository({ backend: 'pglite', db }));
-    });
+    getRepository().then(setRepository);
   }, []);
 
   if (!repository) {

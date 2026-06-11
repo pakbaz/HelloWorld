@@ -1,4 +1,4 @@
-import type { IRepository, Prompt, Variable, Tag } from './types';
+import type { IRepository, Prompt, Variable, Tag, PromptVersion } from './types';
 
 export class HttpRepository implements IRepository {
   private baseUrl: string;
@@ -13,7 +13,7 @@ export class HttpRepository implements IRepository {
     return res.json();
   }
 
-  async savePrompt(prompt: Prompt): Promise<Prompt> {
+  async savePrompt(prompt: Partial<Prompt> & { title: string; body: string }): Promise<Prompt> {
     const url = prompt.id
       ? `${this.baseUrl}/prompts/${prompt.id}`
       : `${this.baseUrl}/prompts`;
@@ -59,7 +59,7 @@ export class HttpRepository implements IRepository {
     return res.json();
   }
 
-  async saveTag(tag: Tag): Promise<Tag> {
+  async saveTag(tag: Partial<Tag> & { name: string }): Promise<Tag> {
     const url = tag.id ? `${this.baseUrl}/tags/${tag.id}` : `${this.baseUrl}/tags`;
     const method = tag.id ? 'PUT' : 'POST';
     const res = await fetch(url, {
@@ -83,5 +83,20 @@ export class HttpRepository implements IRepository {
       body: JSON.stringify({ tag_ids: tagIds }),
     });
     if (!res.ok) throw new Error(`Failed to set prompt tags: ${res.status}`);
+  }
+
+  async getVersions(promptId: number): Promise<PromptVersion[]> {
+    const res = await fetch(`${this.baseUrl}/prompts/${promptId}/versions`);
+    if (!res.ok) throw new Error(`Failed to fetch versions: ${res.status}`);
+    return res.json();
+  }
+
+  async restoreVersion(promptId: number, versionId: number): Promise<Prompt> {
+    const res = await fetch(
+      `${this.baseUrl}/prompts/${promptId}/versions/${versionId}/restore`,
+      { method: 'POST' }
+    );
+    if (!res.ok) throw new Error(`Failed to restore version: ${res.status}`);
+    return res.json();
   }
 }

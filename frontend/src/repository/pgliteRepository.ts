@@ -1,5 +1,5 @@
 import type { PGlite } from '@electric-sql/pglite';
-import type { IRepository, Prompt, Variable, Tag } from './types';
+import type { IRepository, Prompt, Variable, Tag, PromptVersion } from './types';
 
 export class PGliteRepository implements IRepository {
   private db: PGlite;
@@ -64,7 +64,7 @@ export class PGliteRepository implements IRepository {
     }));
   }
 
-  async savePrompt(prompt: Prompt): Promise<Prompt> {
+  async savePrompt(prompt: Partial<Prompt> & { title: string; body: string }): Promise<Prompt> {
     if (prompt.id) {
       const rows = await this.rows<Prompt>(
         `UPDATE prompts
@@ -127,7 +127,7 @@ export class PGliteRepository implements IRepository {
     return this.rows<Tag>('SELECT id, name FROM tags ORDER BY name ASC');
   }
 
-  async saveTag(tag: Tag): Promise<Tag> {
+  async saveTag(tag: Partial<Tag> & { name: string }): Promise<Tag> {
     if (tag.id) {
       const rows = await this.rows<Tag>(
         'UPDATE tags SET name = $1 WHERE id = $2 RETURNING id, name',
@@ -161,5 +161,26 @@ export class PGliteRepository implements IRepository {
         values
       );
     }
+  }
+
+  async getVersions(promptId: number): Promise<PromptVersion[]> {
+    return this.rows<PromptVersion>(
+      `SELECT id, prompt_id, version, title, body, saved_at
+       FROM prompt_versions
+       WHERE prompt_id = $1
+       ORDER BY version DESC`,
+      [promptId]
+    );
+  }
+
+  async restoreVersion(promptId: number, versionId: number): Promise<Prompt> {
+    const rows = await this.rows<{ title: string; body: string }>(
+      `SELECT title, body FROM prompt_versions WHERE id = $1 AND prompt_id = $2`,
+      [versionId, promptId]
+    );
+    if (rows.length === 0) {
+      throw new Error(`Version ${versionId} not found for prompt ${promptId}`);
+    }
+    return this.savePrompt({ id: promptId, title: rows[0].title, body: rows[0].body });
   }
 }
