@@ -3,7 +3,7 @@ import {
   buildInitialValues,
   extractUniqueVariables,
   substituteVariables,
-} from '../utils/variableSubstitution';
+} from '../utils/variableSubstitution.js';
 
 export function VariablePanel({
   promptBody = '',

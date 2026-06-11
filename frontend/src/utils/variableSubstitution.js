@@ -1,10 +1,12 @@
-const PLACEHOLDER_REGEX = /{{\s*([^{}]+?)\s*}}/g;
+function getPlaceholderRegex() {
+  return /{{\s*([^{}]+?)\s*}}/g;
+}
 
 export function extractUniqueVariables(promptBody = '') {
   const uniqueNames = [];
   const seen = new Set();
 
-  for (const match of promptBody.matchAll(PLACEHOLDER_REGEX)) {
+  for (const match of promptBody.matchAll(getPlaceholderRegex())) {
     const rawName = match[1];
     const name = rawName ? rawName.trim() : '';
 
@@ -44,7 +46,7 @@ export function buildInitialValues(promptBody = '', variableDefaults = {}) {
 }
 
 export function substituteVariables(promptBody = '', values = {}) {
-  return promptBody.replace(PLACEHOLDER_REGEX, (_, rawName) => {
+  return promptBody.replace(getPlaceholderRegex(), (_, rawName) => {
     const name = rawName ? rawName.trim() : '';
 
     if (!name) {
