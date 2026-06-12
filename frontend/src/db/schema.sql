@@ -20,8 +20,9 @@ CREATE TABLE IF NOT EXISTS prompts (
   title      TEXT        NOT NULL,
   body       TEXT        NOT NULL DEFAULT '',
   version    INTEGER     NOT NULL DEFAULT 1,
-  created_at TIMESTAMP   NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP   NOT NULL DEFAULT NOW()
+  deleted    BOOLEAN     NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE OR REPLACE TRIGGER prompts_set_updated_at
@@ -32,12 +33,12 @@ CREATE OR REPLACE TRIGGER prompts_set_updated_at
 -- Table: prompt_versions  (immutable snapshots — FR-11)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS prompt_versions (
-  id         SERIAL    PRIMARY KEY,
-  prompt_id  INTEGER   NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
-  version    INTEGER   NOT NULL,
-  title      TEXT      NOT NULL,
-  body       TEXT      NOT NULL,
-  saved_at   TIMESTAMP NOT NULL DEFAULT NOW()
+  id         SERIAL       PRIMARY KEY,
+  prompt_id  INTEGER      NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+  version    INTEGER      NOT NULL,
+  title      TEXT         NOT NULL,
+  body       TEXT         NOT NULL,
+  saved_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 -- ---------------------------------------------------------------------------
