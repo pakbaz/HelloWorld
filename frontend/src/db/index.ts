@@ -21,7 +21,7 @@ export async function initDb(): Promise<PGlite> {
   // throw "process is not defined". Provide a minimal shim before instantiating
   // PGlite. It deliberately omits `versions.node`, so Emscripten still detects a
   // browser environment.
-  const globalScope = globalThis as unknown as {
+  const globalScope = globalThis as typeof globalThis & {
     process?: { env: Record<string, unknown> };
   };
   if (typeof globalScope.process === 'undefined') {
