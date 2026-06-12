@@ -15,6 +15,19 @@ let _db: PGlite | null = null;
 export async function initDb(): Promise<PGlite> {
   if (_db) return _db;
 
+  // PGlite's bundled WASM runtime references Node's global `process` in a few
+  // code paths that upstream guards with `globalThis.process?.env`. Vite strips
+  // those guards during the production build, so in the browser the references
+  // throw "process is not defined". Provide a minimal shim before instantiating
+  // PGlite. It deliberately omits `versions.node`, so Emscripten still detects a
+  // browser environment.
+  const globalScope = globalThis as unknown as {
+    process?: { env: Record<string, unknown> };
+  };
+  if (typeof globalScope.process === 'undefined') {
+    globalScope.process = { env: {} };
+  }
+
   _db = new PGlite('idb://promptforge');
   await _db.exec(schemaSql);
 
