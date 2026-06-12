@@ -91,11 +91,15 @@ export class PGliteRepository implements IRepository {
   }
 
   private async saveSnapshot(saved: Prompt): Promise<void> {
-    await this.db.query(
-      `INSERT INTO prompt_versions (prompt_id, version, title, body, saved_at)
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
-      [saved.id, saved.version, saved.title, saved.body]
-    );
+    try {
+      await this.db.query(
+        `INSERT INTO prompt_versions (prompt_id, version, title, body, saved_at)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+        [saved.id, saved.version, saved.title, saved.body]
+      );
+    } catch (err) {
+      console.error('Failed to save prompt version snapshot:', err);
+    }
   }
 
   async deletePrompt(promptId: number): Promise<void> {
