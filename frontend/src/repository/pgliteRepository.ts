@@ -65,6 +65,8 @@ export class PGliteRepository implements IRepository {
   }
 
   async savePrompt(prompt: Partial<Prompt> & { title: string; body: string }): Promise<Prompt> {
+    let saved: Prompt;
+
     if (prompt.id) {
       const rows = await this.rows<Prompt>(
         `UPDATE prompts
@@ -73,16 +75,31 @@ export class PGliteRepository implements IRepository {
          RETURNING id, title, body, version, created_at, updated_at`,
         [prompt.title, prompt.body, prompt.id]
       );
-      return rows[0];
+      saved = rows[0];
+    } else {
+      const rows = await this.rows<Prompt>(
+        `INSERT INTO prompts (title, body, version, created_at, updated_at)
+         VALUES ($1, $2, 1, now(), now())
+         RETURNING id, title, body, version, created_at, updated_at`,
+        [prompt.title, prompt.body]
+      );
+      saved = rows[0];
     }
 
-    const rows = await this.rows<Prompt>(
-      `INSERT INTO prompts (title, body, version, created_at, updated_at)
-       VALUES ($1, $2, 1, now(), now())
-       RETURNING id, title, body, version, created_at, updated_at`,
-      [prompt.title, prompt.body]
-    );
-    return rows[0];
+    await this.saveSnapshot(saved);
+    return saved;
+  }
+
+  private async saveSnapshot(saved: Prompt): Promise<void> {
+    try {
+      await this.db.query(
+        `INSERT INTO prompt_versions (prompt_id, version, title, body, saved_at)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+        [saved.id, saved.version, saved.title, saved.body]
+      );
+    } catch (err) {
+      console.error('Failed to save prompt version snapshot:', err);
+    }
   }
 
   async deletePrompt(promptId: number): Promise<void> {

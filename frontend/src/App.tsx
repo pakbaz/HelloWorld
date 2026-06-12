@@ -180,10 +180,22 @@ function AppContent() {
 
 export default function App() {
   const [repository, setRepository] = useState<IRepository | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getRepository().then(setRepository);
+    getRepository().then(setRepository).catch((err) => {
+      console.error('Failed to initialise database:', err);
+      setError(err?.message ?? 'Unknown error');
+    });
   }, []);
+
+  if (error) {
+    return (
+      <div className="app-loading">
+        <p>Failed to initialise database: {error}</p>
+      </div>
+    );
+  }
 
   if (!repository) {
     return (
