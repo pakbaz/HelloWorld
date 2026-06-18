@@ -1,11 +1,11 @@
 import { initDb } from '../db/index';
-import { HttpRepository } from './httpRepository';
-import { PGliteRepository } from './pgliteRepository';
+import { HttpRepository } from './httpRepository.ts';
+import { PGliteRepository } from './pgliteRepository.ts';
 import type { IRepository } from './types';
 
 export type { IRepository, Prompt, Variable, Tag, PromptVersion } from './types';
-export { HttpRepository } from './httpRepository';
-export { PGliteRepository } from './pgliteRepository';
+export { HttpRepository } from './httpRepository.ts';
+export { PGliteRepository } from './pgliteRepository.ts';
 
 let _repository: IRepository | null = null;
 
