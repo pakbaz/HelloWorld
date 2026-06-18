@@ -30,16 +30,16 @@ export function PromptTable({ prompts, selectedId, onSelect, onDelete }: PromptT
         {prompts.map((p) => (
           <tr
             key={p.id}
-            className={p.id === selectedId ? 'pt-row--selected' : ''}
+            className={`pt-row${p.id === selectedId ? ' pt-row--selected' : ''}`}
             onClick={() => onSelect(p)}
-            style={{ cursor: 'pointer' }}
           >
-            <td>{p.title}</td>
-            <td>v{p.version}</td>
-            <td>{new Date(p.updated_at).toLocaleString()}</td>
-            <td>
+            <td data-label="Title" className="pt-title-cell">{p.title}</td>
+            <td data-label="Version">v{p.version}</td>
+            <td data-label="Updated">{new Date(p.updated_at).toLocaleString()}</td>
+            <td className="pt-actions-cell">
               <button
                 className="pt-delete-btn"
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   if (confirm(`Delete "${p.title}"?`)) onDelete(p.id);

@@ -91,14 +91,31 @@ function AppContent() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>⚒ PromptForge</h1>
-        <p>AI Prompt Sandbox &amp; Snippet Manager</p>
+        <div className="app-header__brand">
+          <span className="app-header__eyebrow">Prompt workspace</span>
+          <h1>⚒ PromptForge</h1>
+          <p>AI Prompt Sandbox &amp; Snippet Manager</p>
+        </div>
+        <div className="app-header__meta">
+          <span className="app-pill">
+            {prompts.length} prompt{prompts.length === 1 ? '' : 's'}
+          </span>
+          <span className="app-pill app-pill--accent">
+            {selected ? `Editing v${selected.version}` : 'Draft mode'}
+          </span>
+        </div>
       </header>
 
       <main className="app-main">
-        {/* Left panel: prompt list */}
         <aside className="app-sidebar">
-          <button className="btn-new" onClick={newPrompt}>
+          <div className="panel-heading">
+            <div>
+              <p className="panel-heading__eyebrow">Library</p>
+              <h2>Saved prompts</h2>
+            </div>
+            <p className="panel-heading__meta">Browse, switch, or clean up prompts.</p>
+          </div>
+          <button className="btn-new" onClick={newPrompt} type="button">
             + New Prompt
           </button>
           <PromptTable
@@ -109,11 +126,24 @@ function AppContent() {
           />
         </aside>
 
-        {/* Right panel: editor + history */}
         <section className="app-workspace">
+          <div className="workspace-header">
+            <div>
+              <p className="panel-heading__eyebrow">
+                {selected ? 'Selected prompt' : 'Start a new prompt'}
+              </p>
+              <h2>{title.trim() || (selected ? 'Untitled prompt' : 'New prompt')}</h2>
+            </div>
+            <p className="workspace-header__meta">
+              {selected
+                ? 'Update content, manage tags, and restore earlier snapshots when needed.'
+                : 'Draft your prompt, add placeholders, and preview the final output live.'}
+            </p>
+          </div>
           <div className="workspace-tabs">
             <button
               className={`tab${activeTab === 'editor' ? ' tab--active' : ''}`}
+              type="button"
               onClick={() => setActiveTab('editor')}
             >
               Editor
@@ -121,6 +151,7 @@ function AppContent() {
             <button
               className={`tab${activeTab === 'history' ? ' tab--active' : ''}`}
               disabled={!selected}
+              type="button"
               onClick={() => setActiveTab('history')}
             >
               Version History
@@ -145,6 +176,7 @@ function AppContent() {
                   className="btn-save"
                   onClick={handleSave}
                   disabled={saving}
+                  type="button"
                 >
                   {saving ? 'Saving…' : selected ? 'Save & Snapshot' : 'Create Prompt'}
                 </button>
