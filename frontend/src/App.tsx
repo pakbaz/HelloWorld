@@ -22,20 +22,34 @@ function AppContent() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
 
+  const fetchPrompts = useCallback(() => repository.getPrompts(), [repository]);
+
   const loadPrompts = useCallback(async () => {
     try {
-      const list = await repository.getPrompts();
+      const list = await fetchPrompts();
       setPrompts(list);
     } catch (err) {
       console.error('Failed to load prompts:', err);
     }
-  }, [repository]);
+  }, [fetchPrompts]);
 
   useEffect(() => {
-    repository.getPrompts().then(setPrompts).catch((err) => {
-      console.error('Failed to load prompts:', err);
-    });
-  }, [repository]);
+    let cancelled = false;
+
+    fetchPrompts()
+      .then((list) => {
+        if (!cancelled) {
+          setPrompts(list);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load prompts:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchPrompts]);
 
   function newPrompt() {
     setSelected(null);
