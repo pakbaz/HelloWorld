@@ -1,3 +1,7 @@
+:root {
+  --font-size-eyebrow: 0.78rem;
+}
+
 /* PromptForge App Styles */
 
 * {
@@ -37,7 +41,7 @@
 
 .app-header__eyebrow,
 .panel-heading__eyebrow {
-  font-size: 0.78rem;
+  font-size: var(--font-size-eyebrow);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -161,7 +165,7 @@
   padding: 0 8px 12px;
   color: #6b7280;
   font-weight: 600;
-  font-size: 0.78rem;
+  font-size: var(--font-size-eyebrow);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -293,7 +297,7 @@
 /* Editor layout */
 .editor-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 5fr) minmax(320px, 4fr);
   flex: 1;
   gap: 0;
   overflow: hidden;

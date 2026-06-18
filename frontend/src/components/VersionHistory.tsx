@@ -15,7 +15,7 @@ export function VersionHistory({
 }: VersionHistoryProps) {
   const repository = useRepository();
   const [versions, setVersions] = useState<PromptVersion[]>([]);
-  const [loadedPromptId, setLoadedPromptId] = useState<number | null>(null);
+  const [loadedVersionsForPromptId, setLoadedVersionsForPromptId] = useState<number | null>(null);
   const [restoring, setRestoring] = useState<number | null>(null);
 
   useEffect(() => {
@@ -23,7 +23,12 @@ export function VersionHistory({
       .getVersions(promptId)
       .then((nextVersions) => {
         setVersions(nextVersions);
-        setLoadedPromptId(promptId);
+        setLoadedVersionsForPromptId(promptId);
+      })
+      .catch((err) => {
+        console.error('Failed to load version history:', err);
+        setVersions([]);
+        setLoadedVersionsForPromptId(promptId);
       });
   }, [repository, promptId, currentVersion]);
 
@@ -39,7 +44,7 @@ export function VersionHistory({
     }
   }
 
-  if (loadedPromptId !== promptId) return <p className="vh-loading">Loading history…</p>;
+  if (loadedVersionsForPromptId !== promptId) return <p className="vh-loading">Loading history…</p>;
   if (versions.length === 0) return <p className="vh-empty">No versions saved yet.</p>;
 
   return (
