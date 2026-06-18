@@ -28,8 +28,8 @@ function AppContent() {
   }, [repository]);
 
   useEffect(() => {
-    loadPrompts();
-  }, [loadPrompts]);
+    repository.getPrompts().then(setPrompts);
+  }, [repository]);
 
   function newPrompt() {
     setSelected(null);

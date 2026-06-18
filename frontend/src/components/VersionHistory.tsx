@@ -15,15 +15,16 @@ export function VersionHistory({
 }: VersionHistoryProps) {
   const repository = useRepository();
   const [versions, setVersions] = useState<PromptVersion[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadedPromptId, setLoadedPromptId] = useState<number | null>(null);
   const [restoring, setRestoring] = useState<number | null>(null);
 
   useEffect(() => {
-    setLoading(true);
     repository
       .getVersions(promptId)
-      .then(setVersions)
-      .finally(() => setLoading(false));
+      .then((nextVersions) => {
+        setVersions(nextVersions);
+        setLoadedPromptId(promptId);
+      });
   }, [repository, promptId, currentVersion]);
 
   async function handleRestore(v: PromptVersion) {
@@ -38,7 +39,7 @@ export function VersionHistory({
     }
   }
 
-  if (loading) return <p className="vh-loading">Loading history…</p>;
+  if (loadedPromptId !== promptId) return <p className="vh-loading">Loading history…</p>;
   if (versions.length === 0) return <p className="vh-empty">No versions saved yet.</p>;
 
   return (
