@@ -22,15 +22,53 @@ function AppContent() {
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
+  const [loadingPrompts, setLoadingPrompts] = useState(true);
+  const [promptListError, setPromptListError] = useState<string | null>(null);
   const placeholderAnalysis = useMemo(() => analyzePlaceholders(body), [body]);
 
-  const loadPrompts = useCallback(async () => {
-    const list = await repository.getPrompts();
-    setPrompts(list);
-  }, [repository]);
+  const loadPrompts = useCallback(async () => repository.getPrompts(), [repository]);
+
+  const refreshPrompts = useCallback(async () => {
+    setLoadingPrompts(true);
+    setPromptListError(null);
+    try {
+      const list = await loadPrompts();
+      setPrompts(list);
+      return list;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load prompts.';
+      setPromptListError(message);
+      throw error;
+    } finally {
+      setLoadingPrompts(false);
+    }
+  }, [loadPrompts]);
 
   useEffect(() => {
-    loadPrompts();
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const list = await loadPrompts();
+        if (!cancelled) {
+          setPrompts(list);
+          setPromptListError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'Failed to load prompts.';
+          setPromptListError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingPrompts(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [loadPrompts]);
 
   function newPrompt() {
@@ -70,7 +108,7 @@ function AppContent() {
       });
       await repository.setPromptTags(saved.id, selectedTagIds);
       setSelected(saved);
-      await loadPrompts();
+      await refreshPrompts();
     } finally {
       setSaving(false);
     }
@@ -79,19 +117,18 @@ function AppContent() {
   async function handleDelete(id: number) {
     await repository.deletePrompt(id);
     if (selected?.id === id) newPrompt();
-    await loadPrompts();
+    await refreshPrompts();
   }
 
   async function handleRestored() {
     if (!selected) return;
-    const refreshed = await repository.getPrompts();
+    const refreshed = await refreshPrompts();
     const updated = refreshed.find((p) => p.id === selected.id);
     if (updated) {
       setSelected(updated);
       setTitle(updated.title);
       setBody(updated.body);
     }
-    setPrompts(refreshed);
   }
 
   return (
@@ -107,12 +144,18 @@ function AppContent() {
           <button className="btn-new" onClick={newPrompt}>
             + New Prompt
           </button>
-          <PromptTable
-            prompts={prompts}
-            selectedId={selected?.id ?? null}
-            onSelect={selectPrompt}
-            onDelete={handleDelete}
-          />
+          {loadingPrompts ? (
+            <p>Loading prompts…</p>
+          ) : promptListError ? (
+            <p>{promptListError}</p>
+          ) : (
+            <PromptTable
+              prompts={prompts}
+              selectedId={selected?.id ?? null}
+              onSelect={selectPrompt}
+              onDelete={handleDelete}
+            />
+          )}
         </aside>
 
         {/* Right panel: editor + history */}
@@ -174,11 +217,12 @@ function AppContent() {
           )}
 
           {activeTab === 'history' && selected && (
-            <VersionHistory
-              promptId={selected.id}
-              currentVersion={selected.version}
-              onRestored={handleRestored}
-            />
+           <VersionHistory
+             key={`${selected.id}:${selected.version}`}
+             promptId={selected.id}
+             currentVersion={selected.version}
+             onRestored={handleRestored}
+           />
           )}
         </section>
       </main>
