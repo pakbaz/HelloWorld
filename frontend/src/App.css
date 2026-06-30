@@ -475,6 +475,52 @@ textarea {
   color: var(--warning);
 }
 
+.pe-validation,
+.vp-validation {
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.75rem;
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.pe-validation--error,
+.vp-validation--error {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.25);
+  color: #b91c1c;
+}
+
+.pe-validation--warn,
+.vp-validation--warn {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #92400e;
+}
+
+.pe-validation-title,
+.vp-validation-title {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pe-validation-list,
+.vp-validation-list {
+  margin: 0;
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.pe-validation-list li,
+.vp-validation-list li {
+  line-height: 1.4;
+}
+
+/* Variable Panel */
 .variable-panel {
   display: flex;
   flex-direction: column;

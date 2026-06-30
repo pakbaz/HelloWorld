@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { PromptEditor } from './components/PromptEditor';
 import { VariablePanel } from './components/VariablePanel';
@@ -8,6 +8,7 @@ import { PromptTable } from './components/PromptTable';
 import { VersionHistory } from './components/VersionHistory';
 import { getRepository } from './repository/index.ts';
 import { RepositoryContext, useRepository, type IRepository, type Prompt } from './db/RepositoryContext';
+import { analyzePlaceholders } from './utils/placeholderParser';
 
 type ActiveTab = 'editor' | 'history';
 type ThemeMode = 'light' | 'dark';
@@ -36,6 +37,7 @@ function AppContent() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+  const placeholderAnalysis = useMemo(() => analyzePlaceholders(body), [body]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -84,6 +86,10 @@ function AppContent() {
   async function handleSave() {
     if (!title.trim()) {
       alert('Please enter a title.');
+      return;
+    }
+    if (placeholderAnalysis.hasMalformed) {
+      alert('Fix malformed placeholders before saving.');
       return;
     }
     setSaving(true);
@@ -170,6 +176,7 @@ function AppContent() {
                 <PromptEditor
                   title={title}
                   body={body}
+                  analysis={placeholderAnalysis}
                   onTitleChange={setTitle}
                   onBodyChange={setBody}
                 />
@@ -180,7 +187,7 @@ function AppContent() {
                 <button
                   className="btn-save"
                   onClick={handleSave}
-                  disabled={saving}
+                  disabled={saving || placeholderAnalysis.hasMalformed}
                 >
                   {saving ? 'Saving…' : selected ? 'Save & Snapshot' : 'Create Prompt'}
                 </button>
@@ -193,6 +200,7 @@ function AppContent() {
               <div className="preview-col">
                 <VariablePanel
                   body={body}
+                  analysis={placeholderAnalysis}
                   values={variables}
                   onChange={setVariables}
                 />
