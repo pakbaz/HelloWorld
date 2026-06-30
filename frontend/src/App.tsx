@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { PromptEditor } from './components/PromptEditor';
 import { VariablePanel } from './components/VariablePanel';
@@ -9,8 +9,23 @@ import { VersionHistory } from './components/VersionHistory';
 import { getRepository } from './repository/index.ts';
 import { RepositoryContext, useRepository, type IRepository, type Prompt } from './db/RepositoryContext';
 import { clearDraftState, loadDraftState, saveDraftState, type EditorDraftSnapshot } from './utils/draftStorage';
+import { analyzePlaceholders } from './utils/placeholderParser';
 
 type ActiveTab = 'editor' | 'history';
+type ThemeMode = 'light' | 'dark';
+
+function getInitialTheme(): ThemeMode {
+  if (typeof window === 'undefined') {
+    return 'light';
+  }
+
+  const stored = window.localStorage.getItem('promptforge-theme');
+  if (stored === 'light' || stored === 'dark') {
+    return stored;
+  }
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
 
 function buildSnapshot(
   title: string,
@@ -42,6 +57,9 @@ function AppContent() {
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
+  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+  const [loadingPrompts, setLoadingPrompts] = useState(true);
+  const [promptListError, setPromptListError] = useState<string | null>(null);
   const [baselineSnapshot, setBaselineSnapshot] = useState<EditorDraftSnapshot>(
     buildSnapshot('', '', {}, [])
   );
@@ -50,18 +68,56 @@ function AppContent() {
   const currentSnapshot = buildSnapshot(title, body, variables, selectedTagIds);
   const isDirty = !snapshotsEqual(currentSnapshot, baselineSnapshot);
   const draftPromptId = selected?.id ?? null;
-
-  const loadPrompts = useCallback(async () => {
-    const list = await repository.getPrompts();
-    setPrompts(list);
-  }, [repository]);
+  const placeholderAnalysis = useMemo(() => analyzePlaceholders(body), [body]);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      void loadPrompts();
-    }, 0);
+    document.documentElement.setAttribute('data-theme', theme);
+    window.localStorage.setItem('promptforge-theme', theme);
+  }, [theme]);
 
-    return () => window.clearTimeout(timeout);
+  const loadPrompts = useCallback(async () => repository.getPrompts(), [repository]);
+
+  const refreshPrompts = useCallback(async () => {
+    setLoadingPrompts(true);
+    setPromptListError(null);
+    try {
+      const list = await loadPrompts();
+      setPrompts(list);
+      return list;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load prompts.';
+      setPromptListError(message);
+      throw error;
+    } finally {
+      setLoadingPrompts(false);
+    }
+  }, [loadPrompts]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const list = await loadPrompts();
+        if (!cancelled) {
+          setPrompts(list);
+          setPromptListError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'Failed to load prompts.';
+          setPromptListError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingPrompts(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [loadPrompts]);
 
   useEffect(() => {
@@ -104,6 +160,7 @@ function AppContent() {
     setVariables({});
     setSelectedTagIds([]);
     setBaselineSnapshot(buildSnapshot('', '', {}, []));
+    setDraftStatus('idle');
     setActiveTab('editor');
   }
 
@@ -146,6 +203,10 @@ function AppContent() {
       alert('Please enter a title.');
       return;
     }
+    if (placeholderAnalysis.hasMalformed) {
+      alert('Fix malformed placeholders before saving.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -162,9 +223,9 @@ function AppContent() {
       setVariables(nextBaseline.variables);
       setSelectedTagIds(nextBaseline.selectedTagIds);
       setBaselineSnapshot(nextBaseline);
-      clearDraftState(draftPromptId);
+      clearDraftState(saved.id);
       setDraftStatus('cleared');
-      await loadPrompts();
+      await refreshPrompts();
     } finally {
       setSaving(false);
     }
@@ -180,12 +241,12 @@ function AppContent() {
     if (selected?.id === id) {
       resetEditorState();
     }
-    await loadPrompts();
+    await refreshPrompts();
   }
 
   async function handleRestored() {
     if (!selected) return;
-    const refreshed = await repository.getPrompts();
+    const refreshed = await refreshPrompts();
     const updated = refreshed.find((prompt) => prompt.id === selected.id);
     if (updated) {
       const tags = updated.tags ?? [];
@@ -199,31 +260,45 @@ function AppContent() {
       clearDraftState(updated.id);
       setDraftStatus('cleared');
     }
-    setPrompts(refreshed);
   }
 
   return (
     <div className="app">
       <header className="app-header">
-        <h1>⚒ PromptForge</h1>
-        <p>AI Prompt Sandbox &amp; Snippet Manager</p>
+        <div className="app-header__content">
+          <div>
+            <h1>⚒ PromptForge</h1>
+            <p>AI Prompt Sandbox &amp; Snippet Manager</p>
+          </div>
+          <button
+            className="theme-toggle"
+            onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+            aria-pressed={theme === 'dark'}
+          >
+            {theme === 'dark' ? '☀ Light mode' : '🌙 Dark mode'}
+          </button>
+        </div>
       </header>
 
       <main className="app-main">
-        {/* Left panel: prompt list */}
         <aside className="app-sidebar">
           <button className="btn-new" onClick={newPrompt}>
             + New Prompt
           </button>
-          <PromptTable
-            prompts={prompts}
-            selectedId={selected?.id ?? null}
-            onSelect={selectPrompt}
-            onDelete={handleDelete}
-          />
+          {loadingPrompts ? (
+            <p>Loading prompts…</p>
+          ) : promptListError ? (
+            <p>{promptListError}</p>
+          ) : (
+            <PromptTable
+              prompts={prompts}
+              selectedId={selected?.id ?? null}
+              onSelect={selectPrompt}
+              onDelete={handleDelete}
+            />
+          )}
         </aside>
 
-        {/* Right panel: editor + history */}
         <section className="app-workspace">
           <div className="workspace-tabs">
             <button
@@ -248,6 +323,7 @@ function AppContent() {
                 <PromptEditor
                   title={title}
                   body={body}
+                  analysis={placeholderAnalysis}
                   onTitleChange={setTitle}
                   onBodyChange={setBody}
                 />
@@ -259,7 +335,7 @@ function AppContent() {
                   <button
                     className="btn-save"
                     onClick={handleSave}
-                    disabled={saving}
+                    disabled={saving || placeholderAnalysis.hasMalformed}
                   >
                     {saving ? 'Saving…' : selected ? 'Save & Snapshot' : 'Create Prompt'}
                   </button>
@@ -276,6 +352,7 @@ function AppContent() {
               <div className="preview-col">
                 <VariablePanel
                   body={body}
+                  analysis={placeholderAnalysis}
                   values={variables}
                   onChange={setVariables}
                 />
@@ -286,6 +363,7 @@ function AppContent() {
 
           {activeTab === 'history' && selected && (
             <VersionHistory
+              key={`${selected.id}:${selected.version}`}
               promptId={selected.id}
               currentVersion={selected.version}
               onRestored={handleRestored}

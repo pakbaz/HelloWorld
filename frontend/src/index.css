@@ -2,12 +2,18 @@
   box-sizing: border-box;
 }
 
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   font-size: 16px;
-  color: #1f2937;
-  background: #f9fafb;
   -webkit-font-smoothing: antialiased;
 }
 
