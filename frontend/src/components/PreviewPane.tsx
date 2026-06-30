@@ -1,18 +1,13 @@
 import ReactMarkdown from 'react-markdown';
+import { renderBodyWithPlaceholders } from '../utils/placeholderParser';
 
 interface PreviewPaneProps {
   body: string;
   variables: Record<string, string>;
 }
 
-function renderBody(body: string, variables: Record<string, string>): string {
-  return body.replace(/\{\{(\w+)\}\}/g, (_, name) =>
-    variables[name] !== undefined && variables[name] !== '' ? variables[name] : `{{${name}}}`
-  );
-}
-
 export function PreviewPane({ body, variables }: PreviewPaneProps) {
-  const rendered = renderBody(body, variables);
+  const rendered = renderBodyWithPlaceholders(body, variables);
 
   async function handleCopy() {
     await navigator.clipboard.writeText(rendered);
