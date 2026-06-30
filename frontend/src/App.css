@@ -255,6 +255,87 @@ textarea {
   text-align: center;
 }
 
+.prompt-table-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.prompt-list-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.prompt-list-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.prompt-list-controls-row--secondary {
+  align-items: end;
+}
+
+.prompt-list-control {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 7rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.prompt-list-control input,
+.prompt-list-control select {
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  background: var(--surface-elevated);
+}
+
+.prompt-list-control input:focus,
+.prompt-list-control select:focus {
+  outline: 2px solid var(--accent);
+  border-color: transparent;
+}
+
+.prompt-list-reset-btn {
+  align-self: flex-end;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  padding: 0.42rem 0.7rem;
+  background: var(--surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.prompt-list-reset-btn:hover {
+  background: var(--surface-hover);
+}
+
+.prompt-list-reset-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.prompt-list-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.prompt-list-summary__hint {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .prompt-table {
   width: 100%;
   border-collapse: collapse;
@@ -468,7 +549,7 @@ textarea {
   gap: 12px;
   flex-wrap: wrap;
 }
- 
+
 .btn-save {
   align-self: flex-start;
   border: none;
@@ -481,28 +562,28 @@ textarea {
   cursor: pointer;
   box-shadow: var(--shadow-sm);
 }
- 
+
 .btn-save:hover {
   transform: translateY(-1px);
 }
- 
+
 .btn-save:disabled {
   opacity: 0.7;
   cursor: not-allowed;
   transform: none;
 }
- 
+
 .editor-status {
   font-size: 0.8rem;
   color: #6b7280;
   margin: 0;
 }
- 
+
 .editor-status--dirty {
   color: #b45309;
   font-weight: 600;
 }
- 
+
 .current-version-hint {
   font-size: 0.82rem;
   color: var(--text-muted);

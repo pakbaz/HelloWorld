@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { IRepository as RepositoryContract, Prompt, PromptVersion, Tag, Variable } from '../repository/types';
+import type { IRepository as RepositoryContract } from '../repository/types';
 
 export type IRepository = RepositoryContract;
 export type { Prompt, PromptVersion, Tag, Variable } from '../repository/types';
