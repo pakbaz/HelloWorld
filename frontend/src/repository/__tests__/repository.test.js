@@ -183,3 +183,34 @@ test('HttpRepository.restoreVersion calls the correct endpoint', async () => {
   assert.equal(calls[0].url, 'http://localhost:9000/prompts/7/versions/12/restore');
   assert.equal(calls[0].options.method, 'POST');
 });
+
+test('HttpRepository.exportPrompts calls the export endpoint', async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return { ok: true, status: 200, json: async () => ({ prompts: [] }) };
+  };
+
+  const repo = new HttpRepository({ baseUrl: 'http://localhost:9000', fetchImpl });
+  await repo.exportPrompts();
+
+  assert.equal(calls[0].url, 'http://localhost:9000/prompts/export');
+  assert.equal(calls[0].options.method, undefined);
+});
+
+test('PGliteRepository.bulkDeletePrompts deletes each selected prompt', async () => {
+  const calls = [];
+  const db = {
+    query: async (sql, params) => {
+      calls.push({ sql, params });
+      return { rows: [] };
+    },
+  };
+
+  const repo = new PGliteRepository({ db });
+  await repo.bulkDeletePrompts([1, 2]);
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].sql, 'DELETE FROM prompts WHERE id = $1');
+  assert.deepEqual(calls[0].params, [1]);
+});

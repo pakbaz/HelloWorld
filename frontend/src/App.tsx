@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { PromptEditor } from './components/PromptEditor';
 import { VariablePanel } from './components/VariablePanel';
@@ -55,15 +55,21 @@ function AppContent() {
   const [body, setBody] = useState('');
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [selectedPromptIds, setSelectedPromptIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [loadingPrompts, setLoadingPrompts] = useState(true);
   const [promptListError, setPromptListError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [baselineSnapshot, setBaselineSnapshot] = useState<EditorDraftSnapshot>(
     buildSnapshot('', '', {}, [])
   );
   const [draftStatus, setDraftStatus] = useState<'idle' | 'saved' | 'cleared'>('idle');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentSnapshot = buildSnapshot(title, body, variables, selectedTagIds);
   const isDirty = !snapshotsEqual(currentSnapshot, baselineSnapshot);
@@ -159,6 +165,7 @@ function AppContent() {
     setBody('');
     setVariables({});
     setSelectedTagIds([]);
+    setSelectedPromptIds([]);
     setBaselineSnapshot(buildSnapshot('', '', {}, []));
     setDraftStatus('idle');
     setActiveTab('editor');
@@ -185,6 +192,8 @@ function AppContent() {
 
   function newPrompt() {
     if (!confirmDiscard()) return;
+    setSelectedPromptIds([]);
+    setStatusMessage(null);
     const draft = loadDraftState(null);
     applyEditorState(null, draft ?? buildSnapshot('', '', {}, []), buildSnapshot('', '', {}, []));
   }
@@ -225,6 +234,7 @@ function AppContent() {
       setBaselineSnapshot(nextBaseline);
       clearDraftState(saved.id);
       setDraftStatus('cleared');
+      setStatusMessage(selected ? 'Prompt updated.' : 'Prompt created.');
       await refreshPrompts();
     } finally {
       setSaving(false);
@@ -238,10 +248,79 @@ function AppContent() {
 
     await repository.deletePrompt(id);
     clearDraftState(id);
+    setSelectedPromptIds((prev) => prev.filter((promptId) => promptId !== id));
     if (selected?.id === id) {
       resetEditorState();
     }
+    setStatusMessage('Prompt deleted.');
     await refreshPrompts();
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const dataset = await repository.exportPrompts();
+      const blob = new Blob([JSON.stringify(dataset, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `promptforge-export-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatusMessage('Prompt dataset exported.');
+    } catch (error) {
+      setStatusMessage(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const text = await file.text();
+      let data: unknown;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error('The selected file is not valid JSON.');
+      }
+
+      const summary = await repository.importPrompts(data as Parameters<IRepository['importPrompts']>[0]);
+      await refreshPrompts();
+      const detail = [`created ${summary.created}`, `skipped ${summary.skipped}`];
+      if (summary.errors.length) {
+        detail.push(`errors ${summary.errors.length}`);
+      }
+      setStatusMessage(`Import complete (${detail.join(', ')}).`);
+    } catch (error) {
+      setStatusMessage(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setImporting(false);
+      event.target.value = '';
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (!selectedPromptIds.length) return;
+    const count = selectedPromptIds.length;
+    if (!window.confirm(`Delete ${count} selected prompt${count > 1 ? 's' : ''}?`)) return;
+
+    setBulkDeleting(true);
+    try {
+      await repository.bulkDeletePrompts(selectedPromptIds);
+      setSelectedPromptIds([]);
+      if (selected && selectedPromptIds.includes(selected.id)) {
+        resetEditorState();
+      }
+      await refreshPrompts();
+      setStatusMessage(`Deleted ${count} prompt${count > 1 ? 's' : ''}.`);
+    } finally {
+      setBulkDeleting(false);
+    }
   }
 
   async function handleRestored() {
@@ -260,6 +339,12 @@ function AppContent() {
       clearDraftState(updated.id);
       setDraftStatus('cleared');
     }
+  }
+
+  function togglePromptSelection(promptId: number) {
+    setSelectedPromptIds((prev) =>
+      prev.includes(promptId) ? prev.filter((id) => id !== promptId) : [...prev, promptId],
+    );
   }
 
   return (
@@ -282,9 +367,36 @@ function AppContent() {
 
       <main className="app-main">
         <aside className="app-sidebar">
-          <button className="btn-new" onClick={newPrompt}>
-            + New Prompt
-          </button>
+          <div className="sidebar-actions">
+            <button className="btn-new" onClick={newPrompt}>
+              + New Prompt
+            </button>
+            <div className="sidebar-actions-row">
+              <button className="btn-secondary" onClick={handleExport} disabled={exporting}>
+                {exporting ? 'Exporting…' : 'Export'}
+              </button>
+              <button className="btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+                {importing ? 'Importing…' : 'Import'}
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              className="sr-only"
+              type="file"
+              accept="application/json"
+              onChange={handleImport}
+            />
+            {selectedPromptIds.length > 0 && (
+              <button className="btn-danger" onClick={handleBulkDelete} disabled={bulkDeleting}>
+                {bulkDeleting ? 'Deleting…' : `Delete selected (${selectedPromptIds.length})`}
+              </button>
+            )}
+          </div>
+          {statusMessage && (
+            <p className="app-status" role="status">
+              {statusMessage}
+            </p>
+          )}
           {loadingPrompts ? (
             <p>Loading prompts…</p>
           ) : promptListError ? (
@@ -293,8 +405,10 @@ function AppContent() {
             <PromptTable
               prompts={prompts}
               selectedId={selected?.id ?? null}
+              selectedIds={selectedPromptIds}
               onSelect={selectPrompt}
               onDelete={handleDelete}
+              onToggleSelect={togglePromptSelection}
             />
           )}
         </aside>

@@ -7,6 +7,7 @@ export interface Prompt {
   created_at: string;
   updated_at: string;
   tags?: Tag[];
+  variables?: Variable[];
 }
 
 export interface Tag {
@@ -18,7 +19,7 @@ export interface Variable {
   id: number;
   prompt_id: number;
   name: string;
-  default_value: string;
+  default_value: string | null;
 }
 
 export type SortField = 'title' | 'created_at' | 'updated_at';
@@ -49,10 +50,36 @@ export interface PromptVersion {
   saved_at: string;
 }
 
+export interface PromptExportRecord extends Omit<Prompt, 'id' | 'deleted' | 'created_at' | 'updated_at' | 'tags' | 'variables'> {
+  id?: number;
+  deleted?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  tags: Tag[];
+  variables: Variable[];
+  versions: PromptVersion[];
+}
+
+export interface PromptDataset {
+  schemaVersion: 1;
+  exportedAt: string;
+  prompts: PromptExportRecord[];
+}
+
+export interface PromptImportSummary {
+  total: number;
+  created: number;
+  skipped: number;
+  errors: string[];
+}
+
 export interface IRepository {
   getPrompts(): Promise<Prompt[]>;
   savePrompt(prompt: Partial<Prompt> & { title: string; body: string }): Promise<Prompt>;
   deletePrompt(promptId: number): Promise<void>;
+  bulkDeletePrompts(promptIds: number[]): Promise<void>;
+  exportPrompts(): Promise<PromptDataset>;
+  importPrompts(dataset: PromptDataset): Promise<PromptImportSummary>;
   getVariables(promptId: number): Promise<Variable[]>;
   saveVariables(promptId: number, variables: Variable[]): Promise<Variable[]>;
   deleteVariable(variableId: number): Promise<void>;
