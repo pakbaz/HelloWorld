@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { PromptEditor } from './components/PromptEditor';
 import { VariablePanel } from './components/VariablePanel';
@@ -7,18 +7,25 @@ import { TagSelector } from './components/TagSelector';
 import { PromptTable } from './components/PromptTable';
 import { VersionHistory } from './components/VersionHistory';
 import { getRepository } from './repository/index.ts';
-import { RepositoryContext, useRepository, type IRepository, type Prompt } from './db/RepositoryContext';
+import { RepositoryContext, useRepository, type IRepository, type Prompt, type Tag } from './db/RepositoryContext';
 
 type ActiveTab = 'editor' | 'history';
+type PromptSortField = 'title' | 'updated_at' | 'version';
+type PromptSortDirection = 'asc' | 'desc';
 
 function AppContent() {
   const repository = useRepository();
   const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [selected, setSelected] = useState<Prompt | null>(null);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTagId, setSelectedTagId] = useState<number | null>(null);
+  const [sortField, setSortField] = useState<PromptSortField>('updated_at');
+  const [sortDirection, setSortDirection] = useState<PromptSortDirection>('desc');
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
 
@@ -28,8 +35,84 @@ function AppContent() {
   }, [repository]);
 
   useEffect(() => {
-    loadPrompts();
-  }, [loadPrompts]);
+    let cancelled = false;
+
+    const load = async () => {
+      const list = await repository.getPrompts();
+      if (!cancelled) {
+        setPrompts(list);
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [repository]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTags = async () => {
+      try {
+        const nextTags = await repository.getTags();
+        if (!cancelled) {
+          setTags(nextTags);
+        }
+      } catch {
+        if (!cancelled) {
+          setTags([]);
+        }
+      }
+    };
+
+    void loadTags();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [repository]);
+
+  const visiblePrompts = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const filtered = prompts.filter((prompt) => {
+      const matchesSearch =
+        !normalizedQuery ||
+        prompt.title.toLowerCase().includes(normalizedQuery) ||
+        prompt.body.toLowerCase().includes(normalizedQuery);
+      const matchesTag =
+        selectedTagId === null || (prompt.tags ?? []).some((tag) => tag.id === selectedTagId);
+      return matchesSearch && matchesTag;
+    });
+
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    filtered.sort((left, right) => {
+      if (sortField === 'version') {
+        return (left.version - right.version) * direction;
+      }
+
+      if (sortField === 'title') {
+        return left.title.localeCompare(right.title) * direction;
+      }
+
+      const leftUpdated = new Date(left.updated_at).getTime();
+      const rightUpdated = new Date(right.updated_at).getTime();
+      return (leftUpdated - rightUpdated) * direction;
+    });
+
+    return filtered;
+  }, [prompts, searchQuery, selectedTagId, sortField, sortDirection]);
+
+  const hasActiveFilters =
+    searchQuery.trim() !== '' || selectedTagId !== null || sortField !== 'updated_at' || sortDirection !== 'desc';
+
+  function resetFilters() {
+    setSearchQuery('');
+    setSelectedTagId(null);
+    setSortField('updated_at');
+    setSortDirection('desc');
+  }
 
   function newPrompt() {
     setSelected(null);
@@ -102,8 +185,20 @@ function AppContent() {
             + New Prompt
           </button>
           <PromptTable
-            prompts={prompts}
+            prompts={visiblePrompts}
+            totalPrompts={prompts.length}
             selectedId={selected?.id ?? null}
+            tags={tags}
+            searchValue={searchQuery}
+            selectedTagId={selectedTagId}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            hasActiveFilters={hasActiveFilters}
+            onSearchChange={setSearchQuery}
+            onTagChange={setSelectedTagId}
+            onSortFieldChange={setSortField}
+            onSortDirectionChange={setSortDirection}
+            onResetFilters={resetFilters}
             onSelect={selectPrompt}
             onDelete={handleDelete}
           />

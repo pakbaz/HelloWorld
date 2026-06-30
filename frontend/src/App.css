@@ -68,6 +68,86 @@
 }
 
 /* Prompt Table */
+.prompt-table-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prompt-list-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prompt-list-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.prompt-list-controls-row--secondary {
+  align-items: end;
+}
+
+.prompt-list-control {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 110px;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.prompt-list-control input,
+.prompt-list-control select {
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #1f2937;
+}
+
+.prompt-list-control input:focus,
+.prompt-list-control select:focus {
+  outline: 2px solid #3b82f6;
+  border-color: transparent;
+}
+
+.prompt-list-reset-btn {
+  align-self: flex-end;
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.prompt-list-reset-btn:hover {
+  background: #f3f4f6;
+}
+
+.prompt-list-reset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.prompt-list-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.prompt-list-summary__hint {
+  color: #2563eb;
+  font-weight: 600;
+}
+
 .prompt-table {
   width: 100%;
   border-collapse: collapse;
@@ -87,8 +167,17 @@
   border-bottom: 1px solid #f3f4f6;
 }
 
-.prompt-table tr:hover td {
+.prompt-table tbody tr {
+  cursor: pointer;
+}
+
+.prompt-table tbody tr:hover td {
   background: #f0f9ff;
+}
+
+.prompt-table tbody tr:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
 }
 
 .pt-row--selected td {
@@ -108,6 +197,10 @@
 }
 
 .prompt-table--empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
   color: #9ca3af;
   font-size: 0.9rem;
 }
