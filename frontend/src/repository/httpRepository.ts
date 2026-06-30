@@ -1,102 +1,114 @@
-import type { IRepository, Prompt, Variable, Tag, PromptVersion } from './types';
+import type { IRepository, Prompt, Variable, Tag, PromptVersion, PromptDataset, PromptImportSummary } from './types';
 
 export class HttpRepository implements IRepository {
   private baseUrl: string;
+  private fetchImpl: typeof fetch;
 
-  constructor(baseUrl = '/api') {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+  constructor(baseUrlOrOptions: string | { baseUrl?: string; fetchImpl?: typeof fetch } = '/api') {
+    const fetchContext = typeof window !== 'undefined' ? window : globalThis;
+    const defaultFetch = fetchContext.fetch.bind(fetchContext);
+
+    if (typeof baseUrlOrOptions === 'string') {
+      this.baseUrl = baseUrlOrOptions.replace(/\/$/, '');
+      this.fetchImpl = defaultFetch;
+    } else {
+      this.baseUrl = (baseUrlOrOptions.baseUrl ?? '/api').replace(/\/$/, '');
+      this.fetchImpl = (baseUrlOrOptions.fetchImpl ?? defaultFetch);
+    }
+  }
+
+  private async request<T>(path: string, init?: RequestInit): Promise<T> {
+    const res = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      ...init,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Request failed (${res.status}): ${text || res.statusText}`);
+    }
+    if (res.status === 204) return undefined as T;
+    return res.json() as Promise<T>;
   }
 
   async getPrompts(): Promise<Prompt[]> {
-    const res = await fetch(`${this.baseUrl}/prompts`);
-    if (!res.ok) throw new Error(`Failed to fetch prompts: ${res.status}`);
-    return res.json();
+    return this.request<Prompt[]>(`/prompts`);
   }
 
   async savePrompt(prompt: Partial<Prompt> & { title: string; body: string }): Promise<Prompt> {
-    const url = prompt.id
-      ? `${this.baseUrl}/prompts/${prompt.id}`
-      : `${this.baseUrl}/prompts`;
+    const url = prompt.id ? `/prompts/${prompt.id}` : '/prompts';
     const method = prompt.id ? 'PUT' : 'POST';
-    const res = await fetch(url, {
+    return this.request<Prompt>(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(prompt),
     });
-    if (!res.ok) throw new Error(`Failed to save prompt: ${res.status}`);
-    return res.json();
   }
 
   async deletePrompt(promptId: number): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/prompts/${promptId}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`Failed to delete prompt: ${res.status}`);
+    await this.request<void>(`/prompts/${promptId}`, { method: 'DELETE' });
+  }
+
+  async bulkDeletePrompts(promptIds: number[]): Promise<void> {
+    await this.request<void>('/prompts/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ prompt_ids: promptIds }),
+    });
+  }
+
+  async exportPrompts(): Promise<PromptDataset> {
+    return this.request<PromptDataset>('/prompts/export');
+  }
+
+  async importPrompts(dataset: PromptDataset): Promise<PromptImportSummary> {
+    return this.request<PromptImportSummary>('/prompts/import', {
+      method: 'POST',
+      body: JSON.stringify(dataset),
+    });
   }
 
   async getVariables(promptId: number): Promise<Variable[]> {
-    const res = await fetch(`${this.baseUrl}/prompts/${promptId}/variables`);
-    if (!res.ok) throw new Error(`Failed to fetch variables: ${res.status}`);
-    return res.json();
+    return this.request<Variable[]>(`/prompts/${promptId}/variables`);
   }
 
   async saveVariables(promptId: number, variables: Variable[]): Promise<Variable[]> {
-    const res = await fetch(`${this.baseUrl}/prompts/${promptId}/variables`, {
+    return this.request<Variable[]>(`/prompts/${promptId}/variables`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(variables),
     });
-    if (!res.ok) throw new Error(`Failed to save variables: ${res.status}`);
-    return res.json();
   }
 
   async deleteVariable(variableId: number): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/variables/${variableId}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`Failed to delete variable: ${res.status}`);
+    await this.request<void>(`/variables/${variableId}`, { method: 'DELETE' });
   }
 
   async getTags(): Promise<Tag[]> {
-    const res = await fetch(`${this.baseUrl}/tags`);
-    if (!res.ok) throw new Error(`Failed to fetch tags: ${res.status}`);
-    return res.json();
+    return this.request<Tag[]>('/tags');
   }
 
   async saveTag(tag: Partial<Tag> & { name: string }): Promise<Tag> {
-    const url = tag.id ? `${this.baseUrl}/tags/${tag.id}` : `${this.baseUrl}/tags`;
+    const url = tag.id ? `/tags/${tag.id}` : '/tags';
     const method = tag.id ? 'PUT' : 'POST';
-    const res = await fetch(url, {
+    return this.request<Tag>(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(tag),
     });
-    if (!res.ok) throw new Error(`Failed to save tag: ${res.status}`);
-    return res.json();
   }
 
   async deleteTag(tagId: number): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/tags/${tagId}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`Failed to delete tag: ${res.status}`);
+    await this.request<void>(`/tags/${tagId}`, { method: 'DELETE' });
   }
 
   async setPromptTags(promptId: number, tagIds: number[]): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/prompts/${promptId}/tags`, {
+    await this.request<void>(`/prompts/${promptId}/tags`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tag_ids: tagIds }),
     });
-    if (!res.ok) throw new Error(`Failed to set prompt tags: ${res.status}`);
   }
 
   async getVersions(promptId: number): Promise<PromptVersion[]> {
-    const res = await fetch(`${this.baseUrl}/prompts/${promptId}/versions`);
-    if (!res.ok) throw new Error(`Failed to fetch versions: ${res.status}`);
-    return res.json();
+    return this.request<PromptVersion[]>(`/prompts/${promptId}/versions`);
   }
 
   async restoreVersion(promptId: number, versionId: number): Promise<Prompt> {
-    const res = await fetch(
-      `${this.baseUrl}/prompts/${promptId}/versions/${versionId}/restore`,
-      { method: 'POST' }
-    );
-    if (!res.ok) throw new Error(`Failed to restore version: ${res.status}`);
-    return res.json();
+    return this.request<Prompt>(`/prompts/${promptId}/versions/${versionId}/restore`, { method: 'POST' });
   }
 }
