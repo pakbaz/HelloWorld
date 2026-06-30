@@ -19,24 +19,29 @@ export function VersionHistory({
   const [restoring, setRestoring] = useState<number | null>(null);
 
   useEffect(() => {
-    let active = true;
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) {
+        setLoading(true);
+      }
+    }, 0);
 
-    void (async () => {
-      setLoading(true);
-      try {
-        const nextVersions = await repository.getVersions(promptId);
-        if (active) {
+    repository
+      .getVersions(promptId)
+      .then((nextVersions) => {
+        if (!cancelled) {
           setVersions(nextVersions);
         }
-      } finally {
-        if (active) {
+      })
+      .finally(() => {
+        if (!cancelled) {
           setLoading(false);
         }
-      }
-    })();
+      });
 
     return () => {
-      active = false;
+      cancelled = true;
+      window.clearTimeout(timeout);
     };
   }, [repository, promptId, currentVersion]);
 

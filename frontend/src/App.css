@@ -393,6 +393,13 @@ textarea {
   overflow-y: auto;
 }
 
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+ 
 .btn-save {
   align-self: flex-start;
   border: none;
@@ -405,17 +412,28 @@ textarea {
   cursor: pointer;
   box-shadow: var(--shadow-sm);
 }
-
+ 
 .btn-save:hover {
   transform: translateY(-1px);
 }
-
+ 
 .btn-save:disabled {
   opacity: 0.7;
   cursor: not-allowed;
   transform: none;
 }
-
+ 
+.editor-status {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin: 0;
+}
+ 
+.editor-status--dirty {
+  color: #b45309;
+  font-weight: 600;
+}
+ 
 .current-version-hint {
   font-size: 0.82rem;
   color: var(--text-muted);

@@ -8,6 +8,7 @@ import { PromptTable } from './components/PromptTable';
 import { VersionHistory } from './components/VersionHistory';
 import { getRepository } from './repository/index.ts';
 import { RepositoryContext, useRepository, type IRepository, type Prompt } from './db/RepositoryContext';
+import { clearDraftState, loadDraftState, saveDraftState, type EditorDraftSnapshot } from './utils/draftStorage';
 import { analyzePlaceholders } from './utils/placeholderParser';
 
 type ActiveTab = 'editor' | 'history';
@@ -26,6 +27,26 @@ function getInitialTheme(): ThemeMode {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+function buildSnapshot(
+  title: string,
+  body: string,
+  variables: Record<string, string>,
+  selectedTagIds: number[]
+): EditorDraftSnapshot {
+  return { title, body, variables, selectedTagIds };
+}
+
+function snapshotsEqual(left: EditorDraftSnapshot, right: EditorDraftSnapshot): boolean {
+  return (
+    left.title === right.title &&
+    left.body === right.body &&
+    left.selectedTagIds.length === right.selectedTagIds.length &&
+    left.selectedTagIds.every((value, index) => value === right.selectedTagIds[index]) &&
+    Object.keys(left.variables).length === Object.keys(right.variables).length &&
+    Object.entries(left.variables).every(([key, value]) => right.variables[key] === value)
+  );
+}
+
 function AppContent() {
   const repository = useRepository();
   const [prompts, setPrompts] = useState<Prompt[]>([]);
@@ -39,6 +60,14 @@ function AppContent() {
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [loadingPrompts, setLoadingPrompts] = useState(true);
   const [promptListError, setPromptListError] = useState<string | null>(null);
+  const [baselineSnapshot, setBaselineSnapshot] = useState<EditorDraftSnapshot>(
+    buildSnapshot('', '', {}, [])
+  );
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'saved' | 'cleared'>('idle');
+
+  const currentSnapshot = buildSnapshot(title, body, variables, selectedTagIds);
+  const isDirty = !snapshotsEqual(currentSnapshot, baselineSnapshot);
+  const draftPromptId = selected?.id ?? null;
   const placeholderAnalysis = useMemo(() => analyzePlaceholders(body), [body]);
 
   useEffect(() => {
@@ -91,23 +120,82 @@ function AppContent() {
     };
   }, [loadPrompts]);
 
-  function newPrompt() {
+  useEffect(() => {
+    const draft = loadDraftState(null);
+    if (draft) {
+      applyEditorState(null, draft, buildSnapshot('', '', {}, []));
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (snapshotsEqual(currentSnapshot, baselineSnapshot)) {
+        clearDraftState(draftPromptId);
+        setDraftStatus('cleared');
+        return;
+      }
+
+      saveDraftState(draftPromptId, currentSnapshot);
+      setDraftStatus('saved');
+    }, 500);
+
+    return () => window.clearTimeout(timeout);
+  }, [baselineSnapshot, body, currentSnapshot, draftPromptId, title, variables, selectedTagIds]);
+
+  function resetEditorState() {
     setSelected(null);
     setTitle('');
     setBody('');
     setVariables({});
     setSelectedTagIds([]);
+    setBaselineSnapshot(buildSnapshot('', '', {}, []));
+    setDraftStatus('idle');
     setActiveTab('editor');
   }
 
-  async function selectPrompt(p: Prompt) {
-    setSelected(p);
-    setTitle(p.title);
-    setBody(p.body);
-    setVariables({});
-    const tags = p.tags ?? [];
-    setSelectedTagIds(tags.map((t) => t.id));
+  function applyEditorState(
+    prompt: Prompt | null,
+    editorSnapshot: EditorDraftSnapshot,
+    baseline: EditorDraftSnapshot
+  ) {
+    setSelected(prompt);
+    setTitle(editorSnapshot.title);
+    setBody(editorSnapshot.body);
+    setVariables(editorSnapshot.variables);
+    setSelectedTagIds(editorSnapshot.selectedTagIds);
+    setBaselineSnapshot(baseline);
     setActiveTab('editor');
+  }
+
+  function confirmDiscard(message = 'You have unsaved changes. Discard them and continue?') {
+    if (!isDirty) return true;
+    return window.confirm(message);
+  }
+
+  function newPrompt() {
+    if (!confirmDiscard()) return;
+    const draft = loadDraftState(null);
+    applyEditorState(null, draft ?? buildSnapshot('', '', {}, []), buildSnapshot('', '', {}, []));
+  }
+
+  async function selectPrompt(p: Prompt) {
+    if (!confirmDiscard()) return;
+
+    const tags = p.tags ?? [];
+    const savedSnapshot = buildSnapshot(p.title, p.body, {}, tags.map((tag) => tag.id));
+    const draft = loadDraftState(p.id) ?? savedSnapshot;
+    applyEditorState(p, draft, savedSnapshot);
   }
 
   async function handleSave() {
@@ -119,6 +207,7 @@ function AppContent() {
       alert('Fix malformed placeholders before saving.');
       return;
     }
+
     setSaving(true);
     try {
       const saved = await repository.savePrompt({
@@ -127,7 +216,15 @@ function AppContent() {
         body,
       });
       await repository.setPromptTags(saved.id, selectedTagIds);
+      const nextBaseline = buildSnapshot(title.trim(), body, variables, selectedTagIds);
       setSelected(saved);
+      setTitle(nextBaseline.title);
+      setBody(nextBaseline.body);
+      setVariables(nextBaseline.variables);
+      setSelectedTagIds(nextBaseline.selectedTagIds);
+      setBaselineSnapshot(nextBaseline);
+      clearDraftState(saved.id);
+      setDraftStatus('cleared');
       await refreshPrompts();
     } finally {
       setSaving(false);
@@ -135,19 +232,33 @@ function AppContent() {
   }
 
   async function handleDelete(id: number) {
+    if (isDirty && !window.confirm('You have unsaved changes. Discard them and delete this prompt?')) {
+      return;
+    }
+
     await repository.deletePrompt(id);
-    if (selected?.id === id) newPrompt();
+    clearDraftState(id);
+    if (selected?.id === id) {
+      resetEditorState();
+    }
     await refreshPrompts();
   }
 
   async function handleRestored() {
     if (!selected) return;
     const refreshed = await refreshPrompts();
-    const updated = refreshed.find((p) => p.id === selected.id);
+    const updated = refreshed.find((prompt) => prompt.id === selected.id);
     if (updated) {
+      const tags = updated.tags ?? [];
+      const nextBaseline = buildSnapshot(updated.title, updated.body, {}, tags.map((tag) => tag.id));
       setSelected(updated);
       setTitle(updated.title);
       setBody(updated.body);
+      setVariables({});
+      setSelectedTagIds(tags.map((tag) => tag.id));
+      setBaselineSnapshot(nextBaseline);
+      clearDraftState(updated.id);
+      setDraftStatus('cleared');
     }
   }
 
@@ -159,7 +270,11 @@ function AppContent() {
             <h1>⚒ PromptForge</h1>
             <p>AI Prompt Sandbox &amp; Snippet Manager</p>
           </div>
-          <button className="theme-toggle" onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))} aria-pressed={theme === 'dark'}>
+          <button
+            className="theme-toggle"
+            onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+            aria-pressed={theme === 'dark'}
+          >
             {theme === 'dark' ? '☀ Light mode' : '🌙 Dark mode'}
           </button>
         </div>
@@ -216,13 +331,18 @@ function AppContent() {
                   selectedIds={selectedTagIds}
                   onChange={setSelectedTagIds}
                 />
-                <button
-                  className="btn-save"
-                  onClick={handleSave}
-                  disabled={saving || placeholderAnalysis.hasMalformed}
-                >
-                  {saving ? 'Saving…' : selected ? 'Save & Snapshot' : 'Create Prompt'}
-                </button>
+                <div className="editor-actions">
+                  <button
+                    className="btn-save"
+                    onClick={handleSave}
+                    disabled={saving || placeholderAnalysis.hasMalformed}
+                  >
+                    {saving ? 'Saving…' : selected ? 'Save & Snapshot' : 'Create Prompt'}
+                  </button>
+                  <p className={`editor-status${isDirty ? ' editor-status--dirty' : ''}`}>
+                    {isDirty ? 'Unsaved changes' : draftStatus === 'saved' ? 'Draft saved' : 'No unsaved changes'}
+                  </p>
+                </div>
                 {selected && (
                   <p className="current-version-hint">
                     Current: <strong>v{selected.version}</strong>
@@ -242,12 +362,12 @@ function AppContent() {
           )}
 
           {activeTab === 'history' && selected && (
-           <VersionHistory
-             key={`${selected.id}:${selected.version}`}
-             promptId={selected.id}
-             currentVersion={selected.version}
-             onRestored={handleRestored}
-           />
+            <VersionHistory
+              key={`${selected.id}:${selected.version}`}
+              promptId={selected.id}
+              currentVersion={selected.version}
+              onRestored={handleRestored}
+            />
           )}
         </section>
       </main>
