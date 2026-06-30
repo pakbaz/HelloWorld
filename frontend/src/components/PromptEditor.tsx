@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
+import { formatPlaceholder, type PlaceholderAnalysis } from '../utils/placeholderParser';
 
 interface PromptEditorProps {
   title: string;
   body: string;
+  analysis: PlaceholderAnalysis;
   onTitleChange: (v: string) => void;
   onBodyChange: (v: string) => void;
 }
@@ -10,6 +12,7 @@ interface PromptEditorProps {
 export function PromptEditor({
   title,
   body,
+  analysis,
   onTitleChange,
   onBodyChange,
 }: PromptEditorProps) {
@@ -22,9 +25,7 @@ export function PromptEditor({
     }
   }, [body]);
 
-  // Highlight {{placeholders}} in the textarea overlay is complex;
-  // we keep it simple: just show a character count and placeholder count.
-  const placeholders = [...new Set([...body.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]))];
+  const { placeholders, issues } = analysis;
 
   return (
     <div className="prompt-editor">
@@ -38,7 +39,7 @@ export function PromptEditor({
       <textarea
         ref={textareaRef}
         className="pe-body"
-        placeholder="Write your prompt here… use {{variable}} for dynamic placeholders."
+        placeholder="Write your prompt here… use {{variable}} or {{customer-id}} for dynamic placeholders."
         value={body}
         onChange={(e) => onBodyChange(e.target.value)}
         rows={8}
@@ -46,10 +47,22 @@ export function PromptEditor({
       {placeholders.length > 0 && (
         <p className="pe-placeholder-hint">
           Detected placeholders:{' '}
-          {placeholders.map((p) => (
-            <code key={p}>{`{{${p}}}`}</code>
+          {placeholders.map((placeholder) => (
+            <code key={placeholder}>{formatPlaceholder(placeholder)}</code>
           ))}
         </p>
+      )}
+      {issues.length > 0 && (
+        <div className={`pe-validation ${analysis.hasMalformed ? 'pe-validation--error' : 'pe-validation--warn'}`}>
+          <p className="pe-validation-title">
+            {analysis.hasMalformed ? 'Fix placeholder issues before saving.' : 'Placeholder warnings'}
+          </p>
+          <ul className="pe-validation-list">
+            {issues.map((issue, index) => (
+              <li key={`${issue.type}-${issue.name ?? issue.message}-${index}`}>{issue.message}</li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

@@ -4,8 +4,10 @@ class HttpRepository {
       throw new Error('HttpRepository requires a fetch implementation.');
     }
 
+    const fetchContext = typeof window !== 'undefined' ? window : globalThis;
+    const defaultFetch = fetchContext.fetch.bind(fetchContext);
     this.baseUrl = baseUrl.replace(/\/$/, '');
-    this.fetchImpl = fetchImpl;
+    this.fetchImpl = fetchImpl === fetch ? defaultFetch : fetchImpl;
   }
 
   async getPrompts() {
@@ -22,6 +24,24 @@ class HttpRepository {
 
   async deletePrompt(promptId) {
     await this.#request(`/prompts/${promptId}`, { method: 'DELETE' });
+  }
+
+  async bulkDeletePrompts(promptIds) {
+    await this.#request('/prompts/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ prompt_ids: promptIds }),
+    });
+  }
+
+  async exportPrompts() {
+    return this.#request('/prompts/export');
+  }
+
+  async importPrompts(dataset) {
+    return this.#request('/prompts/import', {
+      method: 'POST',
+      body: JSON.stringify(dataset),
+    });
   }
 
   async getVariables(promptId) {

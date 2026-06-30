@@ -20,6 +20,11 @@ export function VersionHistory({
 
   useEffect(() => {
     let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) {
+        setLoading(true);
+      }
+    }, 0);
 
     repository
       .getVersions(promptId)
@@ -36,6 +41,7 @@ export function VersionHistory({
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
     };
   }, [repository, promptId, currentVersion]);
 

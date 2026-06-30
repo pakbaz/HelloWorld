@@ -7,6 +7,7 @@ interface PromptTableProps {
   prompts: Prompt[];
   totalPrompts: number;
   selectedId: number | null;
+  selectedIds: number[];
   tags: Tag[];
   searchValue: string;
   selectedTagId: number | null;
@@ -20,12 +21,14 @@ interface PromptTableProps {
   onResetFilters: () => void;
   onSelect: (p: Prompt) => void;
   onDelete: (id: number) => void;
+  onToggleSelect: (id: number) => void;
 }
 
 export function PromptTable({
   prompts,
   totalPrompts,
   selectedId,
+  selectedIds,
   tags,
   searchValue,
   selectedTagId,
@@ -39,6 +42,7 @@ export function PromptTable({
   onResetFilters,
   onSelect,
   onDelete,
+  onToggleSelect,
 }: PromptTableProps) {
   const hasPromptContent = prompts.length > 0;
   const hasNoPrompts = totalPrompts === 0;
@@ -54,14 +58,14 @@ export function PromptTable({
               type="search"
               value={searchValue}
               placeholder="Search title or body"
-              onChange={(e) => onSearchChange(e.target.value)}
+              onChange={(event) => onSearchChange(event.target.value)}
             />
           </label>
           <label className="prompt-list-control">
             <span>Tag</span>
             <select
               value={selectedTagId ?? ''}
-              onChange={(e) => onTagChange(e.target.value ? Number(e.target.value) : null)}
+              onChange={(event) => onTagChange(event.target.value ? Number(event.target.value) : null)}
             >
               <option value="">All tags</option>
               {tags.map((tag) => (
@@ -75,10 +79,7 @@ export function PromptTable({
         <div className="prompt-list-controls-row prompt-list-controls-row--secondary">
           <label className="prompt-list-control">
             <span>Sort by</span>
-            <select
-              value={sortField}
-              onChange={(e) => onSortFieldChange(e.target.value as PromptSortField)}
-            >
+            <select value={sortField} onChange={(event) => onSortFieldChange(event.target.value as PromptSortField)}>
               <option value="updated_at">Updated</option>
               <option value="title">Title</option>
               <option value="version">Version</option>
@@ -88,7 +89,7 @@ export function PromptTable({
             <span>Direction</span>
             <select
               value={sortDirection}
-              onChange={(e) => onSortDirectionChange(e.target.value as PromptSortDirection)}
+              onChange={(event) => onSortDirectionChange(event.target.value as PromptSortDirection)}
             >
               <option value="desc">Descending</option>
               <option value="asc">Ascending</option>
@@ -108,9 +109,7 @@ export function PromptTable({
               ? 'No prompts matched your filters'
               : `Showing ${prompts.length} of ${totalPrompts} prompts`}
         </span>
-        {hasActiveFilters && !hasNoPrompts && (
-          <span className="prompt-list-summary__hint">Filters active</span>
-        )}
+        {hasActiveFilters && !hasNoPrompts && <span className="prompt-list-summary__hint">Filters active</span>}
       </div>
 
       {hasNoPrompts ? (
@@ -128,6 +127,7 @@ export function PromptTable({
         <table className="prompt-table">
           <thead>
             <tr>
+              <th className="pt-checkbox-cell"></th>
               <th>Title</th>
               <th>Version</th>
               <th>Updated</th>
@@ -135,33 +135,41 @@ export function PromptTable({
             </tr>
           </thead>
           <tbody>
-            {prompts.map((p) => (
+            {prompts.map((prompt) => (
               <tr
-                key={p.id}
-                className={p.id === selectedId ? 'pt-row--selected' : ''}
-                onClick={() => onSelect(p)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelect(p);
+                key={prompt.id}
+                className={prompt.id === selectedId ? 'pt-row--selected' : ''}
+                onClick={() => onSelect(prompt)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onSelect(prompt);
                   }
                 }}
                 role="button"
                 tabIndex={0}
-                aria-selected={p.id === selectedId}
+                aria-selected={prompt.id === selectedId}
               >
-                <td>{p.title}</td>
-                <td>v{p.version}</td>
-                <td>{new Date(p.updated_at).toLocaleString()}</td>
+                <td className="pt-checkbox-cell">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(prompt.id)}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={() => onToggleSelect(prompt.id)}
+                  />
+                </td>
+                <td>{prompt.title}</td>
+                <td>v{prompt.version}</td>
+                <td>{new Date(prompt.updated_at).toLocaleString()}</td>
                 <td>
                   <button
                     type="button"
                     className="pt-delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm(`Delete "${p.title}"?`)) onDelete(p.id);
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (confirm(`Delete "${prompt.title}"?`)) onDelete(prompt.id);
                     }}
-                    aria-label={`Delete ${p.title}`}
+                    aria-label={`Delete ${prompt.title}`}
                   >
                     🗑
                   </button>
