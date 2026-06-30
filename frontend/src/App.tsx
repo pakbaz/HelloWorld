@@ -11,6 +11,20 @@ import { RepositoryContext, useRepository, type IRepository, type Prompt } from 
 import { analyzePlaceholders } from './utils/placeholderParser';
 
 type ActiveTab = 'editor' | 'history';
+type ThemeMode = 'light' | 'dark';
+
+function getInitialTheme(): ThemeMode {
+  if (typeof window === 'undefined') {
+    return 'light';
+  }
+
+  const stored = window.localStorage.getItem('promptforge-theme');
+  if (stored === 'light' || stored === 'dark') {
+    return stored;
+  }
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
 
 function AppContent() {
   const repository = useRepository();
@@ -22,9 +36,15 @@ function AppContent() {
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
+  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [loadingPrompts, setLoadingPrompts] = useState(true);
   const [promptListError, setPromptListError] = useState<string | null>(null);
   const placeholderAnalysis = useMemo(() => analyzePlaceholders(body), [body]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    window.localStorage.setItem('promptforge-theme', theme);
+  }, [theme]);
 
   const loadPrompts = useCallback(async () => repository.getPrompts(), [repository]);
 
@@ -134,12 +154,18 @@ function AppContent() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>⚒ PromptForge</h1>
-        <p>AI Prompt Sandbox &amp; Snippet Manager</p>
+        <div className="app-header__content">
+          <div>
+            <h1>⚒ PromptForge</h1>
+            <p>AI Prompt Sandbox &amp; Snippet Manager</p>
+          </div>
+          <button className="theme-toggle" onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))} aria-pressed={theme === 'dark'}>
+            {theme === 'dark' ? '☀ Light mode' : '🌙 Dark mode'}
+          </button>
+        </div>
       </header>
 
       <main className="app-main">
-        {/* Left panel: prompt list */}
         <aside className="app-sidebar">
           <button className="btn-new" onClick={newPrompt}>
             + New Prompt
@@ -158,7 +184,6 @@ function AppContent() {
           )}
         </aside>
 
-        {/* Right panel: editor + history */}
         <section className="app-workspace">
           <div className="workspace-tabs">
             <button

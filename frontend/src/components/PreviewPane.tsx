@@ -12,6 +12,7 @@ type ExportFormat = 'text' | 'markdown';
 
 export function PreviewPane({ body, variables }: PreviewPaneProps) {
   const rendered = useMemo(() => renderBodyWithPlaceholders(body, variables), [body, variables]);
+  const isEmpty = !body.trim();
   const [feedback, setFeedback] = useState<FeedbackState>('idle');
   const [exportFormat, setExportFormat] = useState<ExportFormat>('text');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -65,7 +66,7 @@ export function PreviewPane({ body, variables }: PreviewPaneProps) {
 
   return (
     <>
-      <div className="preview-pane">
+      <div className={`preview-pane${isEmpty ? ' preview-pane--empty' : ''}`}>
         <div className="pp-header">
           <h4>Preview</h4>
           <div className="pp-actions">
@@ -95,7 +96,15 @@ export function PreviewPane({ body, variables }: PreviewPaneProps) {
         <div className="pp-status" aria-live="polite">
           {feedbackText}
         </div>
-        <div className="pp-content">{renderPreviewContent()}</div>
+        <div className="pp-content">
+          {isEmpty ? (
+            <div className="empty-state">
+              <p>Start typing a prompt to see the rendered preview here.</p>
+            </div>
+          ) : (
+            renderPreviewContent()
+          )}
+        </div>
       </div>
 
       {isFullscreen && (
