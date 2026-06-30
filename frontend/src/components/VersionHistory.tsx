@@ -19,11 +19,25 @@ export function VersionHistory({
   const [restoring, setRestoring] = useState<number | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    repository
-      .getVersions(promptId)
-      .then(setVersions)
-      .finally(() => setLoading(false));
+    let active = true;
+
+    void (async () => {
+      setLoading(true);
+      try {
+        const nextVersions = await repository.getVersions(promptId);
+        if (active) {
+          setVersions(nextVersions);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
   }, [repository, promptId, currentVersion]);
 
   async function handleRestore(v: PromptVersion) {

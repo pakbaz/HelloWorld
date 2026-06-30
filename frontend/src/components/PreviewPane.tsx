@@ -13,13 +13,14 @@ function renderBody(body: string, variables: Record<string, string>): string {
 
 export function PreviewPane({ body, variables }: PreviewPaneProps) {
   const rendered = renderBody(body, variables);
+  const isEmpty = !body.trim();
 
   async function handleCopy() {
     await navigator.clipboard.writeText(rendered);
   }
 
   return (
-    <div className="preview-pane">
+    <div className={`preview-pane${isEmpty ? ' preview-pane--empty' : ''}`}>
       <div className="pp-header">
         <h4>Preview</h4>
         <button className="pp-copy-btn" onClick={handleCopy} title="Copy rendered prompt">
@@ -27,7 +28,13 @@ export function PreviewPane({ body, variables }: PreviewPaneProps) {
         </button>
       </div>
       <div className="pp-content">
-        <ReactMarkdown>{rendered || '*Nothing to preview yet…*'}</ReactMarkdown>
+        {isEmpty ? (
+          <div className="empty-state">
+            <p>Start typing a prompt to see the rendered preview here.</p>
+          </div>
+        ) : (
+          <ReactMarkdown>{rendered}</ReactMarkdown>
+        )}
       </div>
     </div>
   );
