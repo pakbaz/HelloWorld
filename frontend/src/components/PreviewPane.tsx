@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { renderBodyWithPlaceholders } from '../utils/placeholderParser';
 
 interface PreviewPaneProps {
   body: string;
@@ -9,14 +10,8 @@ interface PreviewPaneProps {
 type FeedbackState = 'idle' | 'copied' | 'error';
 type ExportFormat = 'text' | 'markdown';
 
-function renderBody(body: string, variables: Record<string, string>): string {
-  return body.replace(/\{\{(\w+)\}\}/g, (_, name) =>
-    variables[name] !== undefined && variables[name] !== '' ? variables[name] : `{{${name}}}`
-  );
-}
-
 export function PreviewPane({ body, variables }: PreviewPaneProps) {
-  const rendered = useMemo(() => renderBody(body, variables), [body, variables]);
+  const rendered = useMemo(() => renderBodyWithPlaceholders(body, variables), [body, variables]);
   const [feedback, setFeedback] = useState<FeedbackState>('idle');
   const [exportFormat, setExportFormat] = useState<ExportFormat>('text');
   const [isFullscreen, setIsFullscreen] = useState(false);
